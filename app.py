@@ -40,7 +40,7 @@ ativos_risco = {
 }
 
 # ==============================
-# PERÍODO (AGORA MAIOR)
+# PERÍODO
 # ==============================
 
 periodo = st.selectbox("Período", ["5d", "15d", "1mo"], index=2)
@@ -63,7 +63,7 @@ dados_otimismo = converter_tz(dados_otimismo)
 dados_risco = converter_tz(dados_risco)
 
 # ==============================
-# ALINHAR
+# ALINHAR DADOS
 # ==============================
 
 indice = pd.date_range(
@@ -77,7 +77,7 @@ dados_otimismo = dados_otimismo.reindex(indice).ffill()
 dados_risco = dados_risco.reindex(indice).ffill()
 
 # ==============================
-# VARIAÇÃO
+# VARIAÇÃO %
 # ==============================
 
 def variacao_percentual(serie):
@@ -94,7 +94,7 @@ var_risco = pd.DataFrame({
 })
 
 # ==============================
-# LINHAS
+# LINHAS PRINCIPAIS
 # ==============================
 
 def linha_ponderada(df, pesos, span=5):
@@ -108,29 +108,11 @@ linha_otimismo = linha_ponderada(var_otimismo, ativos_otimismo)
 linha_risco = linha_ponderada(var_risco, ativos_risco)
 
 # ==============================
-# RASTREAMENTO
-# ==============================
-
-def calcular_rastreamento(df):
-    rastreio = pd.DataFrame()
-
-    for ativo in df.columns:
-        serie = df[ativo]
-        ema9 = serie.ewm(span=9).mean()
-        ema21 = serie.ewm(span=21).mean()
-        rastreio[ativo] = (ema9 - ema21) * 2
-
-    return rastreio.mean(axis=1)
-
-linha_rastreamento = calcular_rastreamento(var_risco)
-
-# ==============================
-# LIMPEZA
+# LIMPEZA INDEX
 # ==============================
 
 linha_otimismo.index = linha_otimismo.index.tz_localize(None)
 linha_risco.index = linha_risco.index.tz_localize(None)
-linha_rastreamento.index = linha_rastreamento.index.tz_localize(None)
 
 # ==============================
 # GRÁFICO
@@ -156,32 +138,23 @@ fig.add_trace(go.Scatter(
     hoverinfo="x+y"
 ))
 
-fig.add_trace(go.Scatter(
-    x=linha_rastreamento.index,
-    y=linha_rastreamento,
-    mode="lines",
-    name="Rastreamento",
-    line=dict(color="blue", width=2),
-    hoverinfo="x+y"
-))
-
 fig.update_layout(
     template="plotly_dark",
     hovermode="x",
     xaxis=dict(
         title="Data/Hora",
-        rangeslider=dict(visible=True),  # 👈 rolagem estilo trading
+        rangeslider=dict(visible=True),
         showspikes=True,
         spikemode="across"
     ),
     yaxis=dict(
         title="Força (%)",
-        fixedrange=False  # 👈 permite esticar escala
+        fixedrange=False
     )
 )
 
 # ==============================
-# EXIBIR COM ZOOM SCROLL
+# EXIBIÇÃO COM ZOOM
 # ==============================
 
 st.plotly_chart(
@@ -191,17 +164,17 @@ st.plotly_chart(
 )
 
 # ==============================
-# SINAL
+# SINAL SIMPLIFICADO
 # ==============================
 
-def gerar_sinal(l_ot, l_rg, l_rt):
-    if l_rt.iloc[-1] > 0 and l_ot.iloc[-1] > 0:
-        return "🟢 COMPRA FORTE"
-    elif l_rt.iloc[-1] < 0 and l_rg.iloc[-1] > 0:
-        return "🔴 VENDA FORTE"
+def gerar_sinal(l_ot, l_rg):
+    if l_ot.iloc[-1] > l_rg.iloc[-1]:
+        return "🟢 COMPRA (Otimismo domina)"
+    elif l_rg.iloc[-1] > l_ot.iloc[-1]:
+        return "🔴 VENDA (Risco domina)"
     else:
         return "⚪ NEUTRO"
 
-sinal = gerar_sinal(linha_otimismo, linha_risco, linha_rastreamento)
+sinal = gerar_sinal(linha_otimismo, linha_risco)
 
 st.subheader(f"Sinal Geral: {sinal}")
