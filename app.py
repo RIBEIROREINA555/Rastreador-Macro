@@ -7,10 +7,24 @@ st.set_page_config(layout="wide")
 st.title("Rastreador Macro - Reinaldo")
 
 # ==============================
-# 1️⃣ ATIVOS PRINCIPAIS
+# SIDEBAR - NOTÍCIAS
 # ==============================
 
-# 🟢 OTIMISMO (índice)
+st.sidebar.title("📰 Notícias do Mercado")
+
+noticias = [
+    {"hora": "09:00", "evento": "Payroll EUA", "impacto": "⭐⭐⭐"},
+    {"hora": "10:30", "evento": "Estoque de Petróleo", "impacto": "⭐⭐"},
+    {"hora": "15:00", "evento": "Taxa de Juros", "impacto": "⭐⭐⭐"},
+]
+
+for n in noticias:
+    st.sidebar.write(f"{n['hora']} - {n['evento']} {n['impacto']}")
+
+# ==============================
+# ATIVOS
+# ==============================
+
 ativos_otimismo = {
     "^GSPC": 2.0,
     "^IXIC": 1.8,
@@ -19,7 +33,6 @@ ativos_otimismo = {
     "BZ=F": 1.5
 }
 
-# 🔴 RISCO (dólar / proteção)
 ativos_risco = {
     "^VIX": 2.0,
     "TLT": 1.5,
@@ -27,14 +40,16 @@ ativos_risco = {
 }
 
 # ==============================
-# 2️⃣ BAIXAR DADOS (AGORA 30 DIAS)
+# PERÍODO (AGORA MAIOR)
 # ==============================
 
-dados_otimismo = yf.download(list(ativos_otimismo.keys()), period="30d", interval="5m")["Close"]
-dados_risco = yf.download(list(ativos_risco.keys()), period="30d", interval="5m")["Close"]
+periodo = st.selectbox("Período", ["5d", "15d", "1mo"], index=2)
+
+dados_otimismo = yf.download(list(ativos_otimismo.keys()), period=periodo, interval="5m")["Close"]
+dados_risco = yf.download(list(ativos_risco.keys()), period=periodo, interval="5m")["Close"]
 
 # ==============================
-# 3️⃣ CONVERTER HORÁRIO BRASIL
+# TIMEZONE
 # ==============================
 
 def converter_tz(df):
@@ -48,7 +63,7 @@ dados_otimismo = converter_tz(dados_otimismo)
 dados_risco = converter_tz(dados_risco)
 
 # ==============================
-# 4️⃣ ALINHAR DADOS
+# ALINHAR
 # ==============================
 
 indice = pd.date_range(
@@ -62,7 +77,7 @@ dados_otimismo = dados_otimismo.reindex(indice).ffill()
 dados_risco = dados_risco.reindex(indice).ffill()
 
 # ==============================
-# 5️⃣ VARIAÇÃO % (3 HORAS)
+# VARIAÇÃO
 # ==============================
 
 def variacao_percentual(serie):
@@ -79,7 +94,7 @@ var_risco = pd.DataFrame({
 })
 
 # ==============================
-# 6️⃣ LINHAS PRINCIPAIS
+# LINHAS
 # ==============================
 
 def linha_ponderada(df, pesos, span=5):
@@ -93,7 +108,7 @@ linha_otimismo = linha_ponderada(var_otimismo, ativos_otimismo)
 linha_risco = linha_ponderada(var_risco, ativos_risco)
 
 # ==============================
-# 7️⃣ RASTREAMENTO
+# RASTREAMENTO
 # ==============================
 
 def calcular_rastreamento(df):
@@ -101,10 +116,8 @@ def calcular_rastreamento(df):
 
     for ativo in df.columns:
         serie = df[ativo]
-
         ema9 = serie.ewm(span=9).mean()
         ema21 = serie.ewm(span=21).mean()
-
         rastreio[ativo] = (ema9 - ema21) * 2
 
     return rastreio.mean(axis=1)
@@ -112,7 +125,7 @@ def calcular_rastreamento(df):
 linha_rastreamento = calcular_rastreamento(var_risco)
 
 # ==============================
-# 8️⃣ AJUSTE VISUAL (SEM CORTAR HISTÓRICO)
+# LIMPEZA
 # ==============================
 
 linha_otimismo.index = linha_otimismo.index.tz_localize(None)
@@ -120,70 +133,65 @@ linha_risco.index = linha_risco.index.tz_localize(None)
 linha_rastreamento.index = linha_rastreamento.index.tz_localize(None)
 
 # ==============================
-# 🔥 CONTROLE DE VISUALIZAÇÃO
-# ==============================
-
-st.sidebar.title("Configuração de Visualização")
-
-dias_visiveis = st.sidebar.slider("Dias para visualizar", 1, 30, 5)
-
-filtro = linha_otimismo.index > (linha_otimismo.index.max() - pd.Timedelta(days=dias_visiveis))
-
-linha_otimismo_plot = linha_otimismo[filtro]
-linha_risco_plot = linha_risco[filtro]
-linha_rastreamento_plot = linha_rastreamento[filtro]
-
-# ==============================
-# 9️⃣ GRÁFICO
+# GRÁFICO
 # ==============================
 
 fig = go.Figure()
 
 fig.add_trace(go.Scatter(
-    x=linha_otimismo_plot.index,
-    y=linha_otimismo_plot,
+    x=linha_otimismo.index,
+    y=linha_otimismo,
     mode="lines",
-    name="Otimismo (WIN)",
-    line=dict(color="green", width=2)
+    name="Otimismo",
+    line=dict(color="green", width=2),
+    hoverinfo="x+y"
 ))
 
 fig.add_trace(go.Scatter(
-    x=linha_risco_plot.index,
-    y=linha_risco_plot,
+    x=linha_risco.index,
+    y=linha_risco,
     mode="lines",
-    name="Risco (WDO)",
-    line=dict(color="red", width=2)
+    name="Risco",
+    line=dict(color="red", width=2),
+    hoverinfo="x+y"
 ))
 
 fig.add_trace(go.Scatter(
-    x=linha_rastreamento_plot.index,
-    y=linha_rastreamento_plot,
+    x=linha_rastreamento.index,
+    y=linha_rastreamento,
     mode="lines",
     name="Rastreamento",
-    line=dict(color="blue", width=2)
+    line=dict(color="blue", width=2),
+    hoverinfo="x+y"
 ))
 
 fig.update_layout(
     template="plotly_dark",
+    hovermode="x",
     xaxis=dict(
-        title="Data/Hora (Brasília)",
-        tickformat="%d/%m %H:%M",
+        title="Data/Hora",
+        rangeslider=dict(visible=True),  # 👈 rolagem estilo trading
         showspikes=True,
         spikemode="across"
     ),
     yaxis=dict(
         title="Força (%)",
-        side="right",
-        showspikes=True,
-        spikemode="across"
-    ),
-    hovermode="x unified"
+        fixedrange=False  # 👈 permite esticar escala
+    )
 )
 
-st.plotly_chart(fig, use_container_width=True)
+# ==============================
+# EXIBIR COM ZOOM SCROLL
+# ==============================
+
+st.plotly_chart(
+    fig,
+    use_container_width=True,
+    config={"scrollZoom": True}
+)
 
 # ==============================
-# 🔟 SINAL
+# SINAL
 # ==============================
 
 def gerar_sinal(l_ot, l_rg, l_rt):
