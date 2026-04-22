@@ -2,9 +2,13 @@ import yfinance as yf
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
+from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(layout="wide")
 st.title("Rastreador Macro - Reinaldo")
+
+# 🔄 AUTO REFRESH (1 minuto)
+st_autorefresh(interval=60000, key="refresh")
 
 # ==============================
 # SIDEBAR - NOTÍCIAS
@@ -22,15 +26,15 @@ for n in noticias:
     st.sidebar.write(f"{n['hora']} - {n['evento']} {n['impacto']}")
 
 # ==============================
-# ATIVOS
+# ATIVOS (AJUSTADOS PRA MENOS DELAY)
 # ==============================
 
 ativos_otimismo = {
-    "^GSPC": 2.0,
-    "^IXIC": 1.8,
+    "ES=F": 2.0,     # S&P futuro (melhor que ^GSPC)
+    "NQ=F": 1.8,     # Nasdaq futuro
     "VALE3.SA": 1.8,
     "PETR4.SA": 1.8,
-    "BZ=F": 1.5
+    "BZ=F": 1.5      # petróleo
 }
 
 ativos_risco = {
@@ -63,7 +67,7 @@ dados_otimismo = converter_tz(dados_otimismo)
 dados_risco = converter_tz(dados_risco)
 
 # ==============================
-# ALINHAR DADOS
+# ALINHAR
 # ==============================
 
 indice = pd.date_range(
@@ -108,7 +112,7 @@ linha_otimismo = linha_ponderada(var_otimismo, ativos_otimismo)
 linha_risco = linha_ponderada(var_risco, ativos_risco)
 
 # ==============================
-# LIMPEZA INDEX
+# LIMPEZA
 # ==============================
 
 linha_otimismo.index = linha_otimismo.index.tz_localize(None)
@@ -126,7 +130,7 @@ fig.add_trace(go.Scatter(
     mode="lines",
     name="Otimismo",
     line=dict(color="green", width=2),
-    hoverinfo="x+y"
+    hovertemplate="%{x}<br>Otimismo: %{y:.2f}%<extra></extra>"
 ))
 
 fig.add_trace(go.Scatter(
@@ -135,7 +139,7 @@ fig.add_trace(go.Scatter(
     mode="lines",
     name="Risco",
     line=dict(color="red", width=2),
-    hoverinfo="x+y"
+    hovertemplate="%{x}<br>Risco: %{y:.2f}%<extra></extra>"
 ))
 
 fig.update_layout(
@@ -154,7 +158,7 @@ fig.update_layout(
 )
 
 # ==============================
-# EXIBIÇÃO COM ZOOM
+# EXIBIÇÃO
 # ==============================
 
 st.plotly_chart(
@@ -164,7 +168,7 @@ st.plotly_chart(
 )
 
 # ==============================
-# SINAL SIMPLIFICADO
+# SINAL
 # ==============================
 
 def gerar_sinal(l_ot, l_rg):
