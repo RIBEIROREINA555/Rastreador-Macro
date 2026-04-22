@@ -2,19 +2,9 @@ import yfinance as yf
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
-import time
 
 st.set_page_config(layout="wide")
 st.title("Rastreador Macro - Reinaldo")
-
-REFRESH_INTERVAL = 60
-
-# ==============================
-# SESSION STATE (GUARDAR ESCOLHA)
-# ==============================
-
-if "periodo" not in st.session_state:
-    st.session_state.periodo = "1mo"
 
 # ==============================
 # SIDEBAR - NOTÍCIAS
@@ -32,8 +22,11 @@ for n in noticias:
     st.sidebar.write(f"{n['hora']} - {n['evento']} {n['impacto']}")
 
 # ==============================
-# PERÍODO (COM MEMÓRIA)
+# SESSION STATE (mantém período)
 # ==============================
+
+if "periodo" not in st.session_state:
+    st.session_state.periodo = "1d"
 
 periodo = st.selectbox(
     "Período",
@@ -44,29 +37,49 @@ periodo = st.selectbox(
 st.session_state.periodo = periodo
 
 # ==============================
-# ATIVOS
+# CACHE (atualiza a cada 60s)
 # ==============================
 
-ativos_otimismo = {
-    "ES=F": 2.0,
-    "NQ=F": 1.8,
-    "VALE3.SA": 1.8,
-    "PETR4.SA": 1.8,
-    "BZ=F": 1.5
-}
+@st.cache_data(ttl=60)
+def carregar_dados(periodo):
 
-ativos_risco = {
-    "^VIX": 2.0,
-    "TLT": 1.5,
-    "DX-Y.NYB": 2.0
-}
+    ativos_otimismo = {
+        # 🌎 Global
+        "ES=F": 2.0,
+        "NQ=F": 1.8,
+        "BZ=F": 1.5,
 
-# ==============================
-# DADOS
-# ==============================
+        # 🇧🇷 Brasil (peso real)
+        "VALE3.SA": 2.0,
+        "PETR4.SA": 2.0,
+        "ITUB4.SA": 1.8,
+        "BBDC4.SA": 1.5,
+        "ABEV3.SA": 1.2,
+        "WEGE3.SA": 1.2,
+        "B3SA3.SA": 1.2
+    }
 
-dados_otimismo = yf.download(list(ativos_otimismo.keys()), period=periodo, interval="5m")["Close"]
-dados_risco = yf.download(list(ativos_risco.keys()), period=periodo, interval="5m")["Close"]
+    ativos_risco = {
+        "^VIX": 2.0,
+        "TLT": 1.5,
+        "DX-Y.NYB": 2.0
+    }
+
+    dados_otimismo = yf.download(
+        list(ativos_otimismo.keys()),
+        period=periodo,
+        interval="5m"
+    )["Close"]
+
+    dados_risco = yf.download(
+        list(ativos_risco.keys()),
+        period=periodo,
+        interval="5m"
+    )["Close"]
+
+    return dados_otimismo, dados_risco, ativos_otimismo, ativos_risco
+
+dados_otimismo, dados_risco, ativos_otimismo, ativos_risco = carregar_dados(periodo)
 
 # ==============================
 # TIMEZONE
@@ -83,7 +96,7 @@ dados_otimismo = converter_tz(dados_otimismo)
 dados_risco = converter_tz(dados_risco)
 
 # ==============================
-# ALINHAR
+# ALINHAR DADOS
 # ==============================
 
 indice = pd.date_range(
@@ -127,6 +140,7 @@ def linha_ponderada(df, pesos, span=5):
 linha_otimismo = linha_ponderada(var_otimismo, ativos_otimismo)
 linha_risco = linha_ponderada(var_risco, ativos_risco)
 
+# limpar timezone
 linha_otimismo.index = linha_otimismo.index.tz_localize(None)
 linha_risco.index = linha_risco.index.tz_localize(None)
 
@@ -157,7 +171,7 @@ fig.add_trace(go.Scatter(
 fig.update_layout(
     template="plotly_dark",
     hovermode="x",
-    uirevision="fix",  # 🔥 mantém zoom e posição
+    uirevision="fix",  # 🔥 mantém zoom mesmo atualizando
     xaxis=dict(
         title="Data/Hora",
         rangeslider=dict(visible=True),
@@ -193,8 +207,8 @@ sinal = gerar_sinal(linha_otimismo, linha_risco)
 st.subheader(f"Sinal Geral: {sinal}")
 
 # ==============================
-# AUTO REFRESH
+# ATUALIZAÇÃO MANUAL
 # ==============================
 
-time.sleep(REFRESH_INTERVAL)
-st.rerun()
+if st.button("🔄 Atualizar agora"):
+    st.cache_data.clear()
