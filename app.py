@@ -7,8 +7,14 @@ import time
 st.set_page_config(layout="wide")
 st.title("Rastreador Macro - Reinaldo")
 
-# 🔄 AUTO REFRESH NATIVO (sem biblioteca externa)
-REFRESH_INTERVAL = 60  # segundos
+REFRESH_INTERVAL = 60
+
+# ==============================
+# SESSION STATE (GUARDAR ESCOLHA)
+# ==============================
+
+if "periodo" not in st.session_state:
+    st.session_state.periodo = "1mo"
 
 # ==============================
 # SIDEBAR - NOTÍCIAS
@@ -26,7 +32,19 @@ for n in noticias:
     st.sidebar.write(f"{n['hora']} - {n['evento']} {n['impacto']}")
 
 # ==============================
-# ATIVOS (MENOS ATRASO)
+# PERÍODO (COM MEMÓRIA)
+# ==============================
+
+periodo = st.selectbox(
+    "Período",
+    ["1d", "5d", "15d", "1mo"],
+    index=["1d", "5d", "15d", "1mo"].index(st.session_state.periodo)
+)
+
+st.session_state.periodo = periodo
+
+# ==============================
+# ATIVOS
 # ==============================
 
 ativos_otimismo = {
@@ -42,12 +60,6 @@ ativos_risco = {
     "TLT": 1.5,
     "DX-Y.NYB": 2.0
 }
-
-# ==============================
-# PERÍODO
-# ==============================
-
-periodo = st.selectbox("Período", ["5d", "15d", "1mo"], index=2)
 
 # ==============================
 # DADOS
@@ -115,10 +127,6 @@ def linha_ponderada(df, pesos, span=5):
 linha_otimismo = linha_ponderada(var_otimismo, ativos_otimismo)
 linha_risco = linha_ponderada(var_risco, ativos_risco)
 
-# ==============================
-# LIMPEZA
-# ==============================
-
 linha_otimismo.index = linha_otimismo.index.tz_localize(None)
 linha_risco.index = linha_risco.index.tz_localize(None)
 
@@ -149,6 +157,7 @@ fig.add_trace(go.Scatter(
 fig.update_layout(
     template="plotly_dark",
     hovermode="x",
+    uirevision="fix",  # 🔥 mantém zoom e posição
     xaxis=dict(
         title="Data/Hora",
         rangeslider=dict(visible=True),
@@ -160,10 +169,6 @@ fig.update_layout(
         fixedrange=False
     )
 )
-
-# ==============================
-# EXIBIR
-# ==============================
 
 st.plotly_chart(
     fig,
@@ -188,7 +193,7 @@ sinal = gerar_sinal(linha_otimismo, linha_risco)
 st.subheader(f"Sinal Geral: {sinal}")
 
 # ==============================
-# AUTO REFRESH LOOP
+# AUTO REFRESH
 # ==============================
 
 time.sleep(REFRESH_INTERVAL)
