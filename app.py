@@ -2,13 +2,13 @@ import yfinance as yf
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
-from streamlit_autorefresh import st_autorefresh
+import time
 
 st.set_page_config(layout="wide")
 st.title("Rastreador Macro - Reinaldo")
 
-# 🔄 AUTO REFRESH (1 minuto)
-st_autorefresh(interval=60000, key="refresh")
+# 🔄 AUTO REFRESH NATIVO (sem biblioteca externa)
+REFRESH_INTERVAL = 60  # segundos
 
 # ==============================
 # SIDEBAR - NOTÍCIAS
@@ -26,15 +26,15 @@ for n in noticias:
     st.sidebar.write(f"{n['hora']} - {n['evento']} {n['impacto']}")
 
 # ==============================
-# ATIVOS (AJUSTADOS PRA MENOS DELAY)
+# ATIVOS (MENOS ATRASO)
 # ==============================
 
 ativos_otimismo = {
-    "ES=F": 2.0,     # S&P futuro (melhor que ^GSPC)
-    "NQ=F": 1.8,     # Nasdaq futuro
+    "ES=F": 2.0,
+    "NQ=F": 1.8,
     "VALE3.SA": 1.8,
     "PETR4.SA": 1.8,
-    "BZ=F": 1.5      # petróleo
+    "BZ=F": 1.5
 }
 
 ativos_risco = {
@@ -48,6 +48,10 @@ ativos_risco = {
 # ==============================
 
 periodo = st.selectbox("Período", ["5d", "15d", "1mo"], index=2)
+
+# ==============================
+# DADOS
+# ==============================
 
 dados_otimismo = yf.download(list(ativos_otimismo.keys()), period=periodo, interval="5m")["Close"]
 dados_risco = yf.download(list(ativos_risco.keys()), period=periodo, interval="5m")["Close"]
@@ -98,7 +102,7 @@ var_risco = pd.DataFrame({
 })
 
 # ==============================
-# LINHAS PRINCIPAIS
+# LINHAS
 # ==============================
 
 def linha_ponderada(df, pesos, span=5):
@@ -158,7 +162,7 @@ fig.update_layout(
 )
 
 # ==============================
-# EXIBIÇÃO
+# EXIBIR
 # ==============================
 
 st.plotly_chart(
@@ -182,3 +186,10 @@ def gerar_sinal(l_ot, l_rg):
 sinal = gerar_sinal(linha_otimismo, linha_risco)
 
 st.subheader(f"Sinal Geral: {sinal}")
+
+# ==============================
+# AUTO REFRESH LOOP
+# ==============================
+
+time.sleep(REFRESH_INTERVAL)
+st.rerun()
