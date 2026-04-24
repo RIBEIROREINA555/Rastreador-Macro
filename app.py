@@ -2,13 +2,25 @@ import yfinance as yf
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
-from streamlit_autorefresh import st_autorefresh
+import time
 
 st.set_page_config(layout="wide")
 st.title("Rastreador Macro - Reinaldo")
 
-# 🔥 AUTO REFRESH REAL (60s)
-st_autorefresh(interval=60000, key="auto_refresh")
+# ==============================
+# AUTO REFRESH (FUNCIONA NO RENDER)
+# ==============================
+
+st.markdown(
+    """
+    <script>
+    setTimeout(function(){
+        window.location.reload();
+    }, 60000);
+    </script>
+    """,
+    unsafe_allow_html=True
+)
 
 # ==============================
 # SIDEBAR - NOTÍCIAS
@@ -41,7 +53,7 @@ periodo = st.selectbox(
 st.session_state.periodo = periodo
 
 # ==============================
-# CACHE
+# CACHE (atualiza a cada 60s)
 # ==============================
 
 @st.cache_data(ttl=60)
@@ -69,7 +81,7 @@ def carregar_dados(periodo):
     dados_otimismo = yf.download(
         list(ativos_otimismo.keys()),
         period=periodo,
-        interval="1m"   # 🔥 melhor resposta
+        interval="1m"
     )["Close"]
 
     dados_risco = yf.download(
@@ -97,7 +109,7 @@ dados_otimismo = converter_tz(dados_otimismo)
 dados_risco = converter_tz(dados_risco)
 
 # ==============================
-# ALINHAR
+# ALINHAR DADOS
 # ==============================
 
 indice = pd.date_range(
@@ -111,11 +123,11 @@ dados_otimismo = dados_otimismo.reindex(indice).ffill()
 dados_risco = dados_risco.reindex(indice).ffill()
 
 # ==============================
-# VARIAÇÃO
+# VARIAÇÃO %
 # ==============================
 
 def variacao_percentual(serie):
-    return ((serie / serie.shift(180)) - 1) * 100  # 🔥 3h em 1min
+    return ((serie / serie.shift(180)) - 1) * 100
 
 var_otimismo = pd.DataFrame({
     ativo: variacao_percentual(dados_otimismo[ativo]).fillna(0)
@@ -170,11 +182,21 @@ fig.update_layout(
     template="plotly_dark",
     hovermode="x",
     uirevision="fix",
-    xaxis=dict(rangeslider=dict(visible=True)),
-    yaxis=dict(fixedrange=False)
+    xaxis=dict(
+        title="Data/Hora",
+        rangeslider=dict(visible=True)
+    ),
+    yaxis=dict(
+        title="Força (%)",
+        fixedrange=False
+    )
 )
 
-st.plotly_chart(fig, use_container_width=True, config={"scrollZoom": True})
+st.plotly_chart(
+    fig,
+    use_container_width=True,
+    config={"scrollZoom": True}
+)
 
 # ==============================
 # SINAL
