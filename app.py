@@ -212,3 +212,19 @@ st.subheader(f"Sinal Geral: {sinal}")
 
 if st.button("🔄 Atualizar agora"):
     st.cache_data.clear()
+    import time
+
+# ==============================
+# AUTO REFRESH INTELIGENTE
+# ==============================
+
+if "last_update" not in st.session_state:
+    st.session_state.last_update = time.time()
+
+tempo_atual = time.time()
+
+# atualiza a cada 60 segundos
+if tempo_atual - st.session_state.last_update > 60:
+    st.session_state.last_update = tempo_atual
+    st.cache_data.clear()
+    st.rerun()
