@@ -23,7 +23,7 @@ for n in noticias:
     st.sidebar.write(f"{n['hora']} - {n['evento']} {n['impacto']}")
 
 # ==============================
-# SESSION STATE (mantém período)
+# SESSION STATE (PERÍODO)
 # ==============================
 
 if "periodo" not in st.session_state:
@@ -38,7 +38,7 @@ periodo = st.selectbox(
 st.session_state.periodo = periodo
 
 # ==============================
-# CACHE (60s)
+# CACHE
 # ==============================
 
 @st.cache_data(ttl=60)
@@ -94,7 +94,7 @@ dados_otimismo = converter_tz(dados_otimismo)
 dados_risco = converter_tz(dados_risco)
 
 # ==============================
-# ALINHAR DADOS
+# ALINHAR
 # ==============================
 
 indice = pd.date_range(
@@ -108,7 +108,7 @@ dados_otimismo = dados_otimismo.reindex(indice).ffill()
 dados_risco = dados_risco.reindex(indice).ffill()
 
 # ==============================
-# VARIAÇÃO %
+# VARIAÇÃO
 # ==============================
 
 def variacao_percentual(serie):
@@ -142,6 +142,13 @@ linha_otimismo.index = linha_otimismo.index.tz_localize(None)
 linha_risco.index = linha_risco.index.tz_localize(None)
 
 # ==============================
+# CONTROLE DE ZOOM
+# ==============================
+
+if "range_x" not in st.session_state:
+    st.session_state.range_x = None
+
+# ==============================
 # GRÁFICO
 # ==============================
 
@@ -169,7 +176,8 @@ fig.update_layout(
     uirevision="fix",
     xaxis=dict(
         title="Data/Hora",
-        rangeslider=dict(visible=True)
+        rangeslider=dict(visible=True),
+        range=st.session_state.range_x
     ),
     yaxis=dict(
         title="Força (%)",
@@ -198,19 +206,14 @@ def gerar_sinal(l_ot, l_rg):
 st.subheader(f"Sinal Geral: {gerar_sinal(linha_otimismo, linha_risco)}")
 
 # ==============================
-# INFO DE ATUALIZAÇÃO
+# INFO
 # ==============================
 
 st.caption(f"🕒 Última atualização: {pd.Timestamp.now().strftime('%H:%M:%S')}")
 
 # ==============================
-# AUTO REFRESH REAL
+# AUTO REFRESH
 # ==============================
 
-if "contador" not in st.session_state:
-    st.session_state.contador = 0
-
-time.sleep(60)  # ⏱️ 60 segundos
-
-st.session_state.contador += 1
+time.sleep(60)
 st.rerun()
