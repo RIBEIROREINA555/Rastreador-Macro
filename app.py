@@ -8,21 +8,6 @@ st.set_page_config(layout="wide")
 st.title("Rastreador Macro - Reinaldo")
 
 # ==============================
-# AUTO REFRESH (FUNCIONA NO RENDER)
-# ==============================
-
-st.markdown(
-    """
-    <script>
-    setTimeout(function(){
-        window.location.reload();
-    }, 60000);
-    </script>
-    """,
-    unsafe_allow_html=True
-)
-
-# ==============================
 # SIDEBAR - NOTÍCIAS
 # ==============================
 
@@ -38,7 +23,7 @@ for n in noticias:
     st.sidebar.write(f"{n['hora']} - {n['evento']} {n['impacto']}")
 
 # ==============================
-# SESSION STATE
+# SESSION STATE (mantém período)
 # ==============================
 
 if "periodo" not in st.session_state:
@@ -53,7 +38,7 @@ periodo = st.selectbox(
 st.session_state.periodo = periodo
 
 # ==============================
-# CACHE (atualiza a cada 60s)
+# CACHE (60s)
 # ==============================
 
 @st.cache_data(ttl=60)
@@ -213,8 +198,19 @@ def gerar_sinal(l_ot, l_rg):
 st.subheader(f"Sinal Geral: {gerar_sinal(linha_otimismo, linha_risco)}")
 
 # ==============================
-# BOTÃO MANUAL
+# INFO DE ATUALIZAÇÃO
 # ==============================
 
-if st.button("🔄 Atualizar agora"):
-    st.cache_data.clear()
+st.caption(f"🕒 Última atualização: {pd.Timestamp.now().strftime('%H:%M:%S')}")
+
+# ==============================
+# AUTO REFRESH REAL
+# ==============================
+
+if "contador" not in st.session_state:
+    st.session_state.contador = 0
+
+time.sleep(60)  # ⏱️ 60 segundos
+
+st.session_state.contador += 1
+st.rerun()
