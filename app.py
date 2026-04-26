@@ -75,9 +75,14 @@ def carregar_dados(periodo):
         interval="1m"
     )["Close"]
 
-    return dados_otimismo, dados_risco, ativos_otimismo, ativos_risco
+   return dados_otimismo, dados_risco, ativos_otimismo, ativos_risco
 
 dados_otimismo, dados_risco, ativos_otimismo, ativos_risco = carregar_dados(periodo)
+
+# proteção contra dados vazios
+if dados_otimismo.empty or dados_risco.empty:
+    st.warning("Dados indisponíveis no momento. Tente outro período.")
+    st.stop()
 
 # ==============================
 # TIMEZONE
@@ -94,18 +99,22 @@ dados_otimismo = converter_tz(dados_otimismo)
 dados_risco = converter_tz(dados_risco)
 
 # ==============================
-# ALINHAR
+# LIMPEZA E ALINHAMENTO SEGURO
 # ==============================
 
-indice = pd.date_range(
-    start=min(dados_otimismo.index.min(), dados_risco.index.min()),
-    end=max(dados_otimismo.index.max(), dados_risco.index.max()),
-    freq="1min",
-    tz="America/Sao_Paulo"
-)
+dados_otimismo = dados_otimismo.dropna(how="all")
+dados_risco = dados_risco.dropna(how="all")
 
-dados_otimismo = dados_otimismo.reindex(indice).ffill()
-dados_risco = dados_risco.reindex(indice).ffill()
+# mantém apenas timestamps válidos
+dados_otimismo = dados_otimismo[~dados_otimismo.index.duplicated()]
+dados_risco = dados_risco[~dados_risco.index.duplicated()]
+
+# junta sem quebrar
+dados = dados_otimismo.join(dados_risco, how="outer").ffill()
+
+# separa novamente
+dados_otimismo = dados[dados_otimismo.columns]
+dados_risco = dados[dados_risco.columns]
 
 # ==============================
 # VARIAÇÃO
