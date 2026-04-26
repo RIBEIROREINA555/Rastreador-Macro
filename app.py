@@ -23,18 +23,34 @@ for n in noticias:
     st.sidebar.write(f"{n['hora']} - {n['evento']} {n['impacto']}")
 
 # ==============================
-# PERÍODO FIXO (1 DIA - MAIS ESTÁVEL)
+# PERÍODO (INTELIGENTE)
 # ==============================
 
-periodo = "1d"
-intervalo = "1m"
+opcoes = {
+    "1d": "1m",
+    "5d": "5m",
+    "15d": "15m",
+    "1mo": "30m"
+}
+
+if "periodo" not in st.session_state:
+    st.session_state.periodo = "1d"
+
+periodo = st.selectbox(
+    "Período",
+    list(opcoes.keys()),
+    index=list(opcoes.keys()).index(st.session_state.periodo)
+)
+
+st.session_state.periodo = periodo
+intervalo = opcoes[periodo]
 
 # ==============================
 # CACHE
 # ==============================
 
 @st.cache_data(ttl=60)
-def carregar_dados():
+def carregar_dados(periodo, intervalo):
 
     ativos_otimismo = {
         "ES=F": 2.0,
@@ -66,19 +82,18 @@ def carregar_dados():
 
     return dados_otimismo, dados_risco, ativos_otimismo, ativos_risco
 
-
 # ==============================
 # CARREGAR DADOS
 # ==============================
 
-dados_otimismo, dados_risco, ativos_otimismo, ativos_risco = carregar_dados()
+dados_otimismo, dados_risco, ativos_otimismo, ativos_risco = carregar_dados(periodo, intervalo)
 
 # ==============================
-# PROTEÇÃO (EVITA ERRO)
+# PROTEÇÃO
 # ==============================
 
 if dados_otimismo.empty or dados_risco.empty:
-    st.warning("Dados indisponíveis no momento. Tente novamente.")
+    st.warning("Dados indisponíveis. Tente outro período.")
     st.stop()
 
 # ==============================
@@ -96,7 +111,7 @@ dados_otimismo = converter_tz(dados_otimismo)
 dados_risco = converter_tz(dados_risco)
 
 # ==============================
-# LIMPEZA E ALINHAMENTO (SEGURO)
+# LIMPEZA SEGURA
 # ==============================
 
 dados_otimismo = dados_otimismo.dropna(how="all")
@@ -111,8 +126,15 @@ dados_risco = dados[dados_risco.columns]
 # VARIAÇÃO %
 # ==============================
 
+shift_map = {
+    "1m": 180,
+    "5m": 36,
+    "15m": 12,
+    "30m": 6
+}
+
 def variacao_percentual(serie):
-    return ((serie / serie.shift(180)) - 1) * 100
+    return ((serie / serie.shift(shift_map[intervalo])) - 1) * 100
 
 var_otimismo = pd.DataFrame({
     ativo: variacao_percentual(dados_otimismo[ativo]).fillna(0)
@@ -194,7 +216,7 @@ st.subheader(f"Sinal: {gerar_sinal(linha_otimismo, linha_risco)}")
 # INFO
 # ==============================
 
-st.caption(f"🕒 Última atualização: {pd.Timestamp.now().strftime('%H:%M:%S')}")
+st.caption(f"🕒 Atualizado às: {pd.Timestamp.now().strftime('%H:%M:%S')}")
 
 # ==============================
 # AUTO REFRESH
