@@ -23,26 +23,18 @@ for n in noticias:
     st.sidebar.write(f"{n['hora']} - {n['evento']} {n['impacto']}")
 
 # ==============================
-# SESSION STATE (PERÍODO)
+# PERÍODO FIXO (1 DIA - MAIS ESTÁVEL)
 # ==============================
 
-if "periodo" not in st.session_state:
-    st.session_state.periodo = "1d"
-
-periodo = st.selectbox(
-    "Período",
-    ["1d", "5d", "15d", "1mo"],
-    index=["1d", "5d", "15d", "1mo"].index(st.session_state.periodo)
-)
-
-st.session_state.periodo = periodo
+periodo = "1d"
+intervalo = "1m"
 
 # ==============================
 # CACHE
 # ==============================
 
 @st.cache_data(ttl=60)
-def carregar_dados(periodo):
+def carregar_dados():
 
     ativos_otimismo = {
         "ES=F": 2.0,
@@ -51,10 +43,7 @@ def carregar_dados(periodo):
         "VALE3.SA": 2.0,
         "PETR4.SA": 2.0,
         "ITUB4.SA": 1.8,
-        "BBDC4.SA": 1.5,
-        "ABEV3.SA": 1.2,
-        "WEGE3.SA": 1.2,
-        "B3SA3.SA": 1.2
+        "BBDC4.SA": 1.5
     }
 
     ativos_risco = {
@@ -66,22 +55,30 @@ def carregar_dados(periodo):
     dados_otimismo = yf.download(
         list(ativos_otimismo.keys()),
         period=periodo,
-        interval="1m"
+        interval=intervalo
     )["Close"]
 
     dados_risco = yf.download(
         list(ativos_risco.keys()),
         period=periodo,
-        interval="1m"
+        interval=intervalo
     )["Close"]
 
-   return dados_otimismo, dados_risco, ativos_otimismo, ativos_risco
+    return dados_otimismo, dados_risco, ativos_otimismo, ativos_risco
 
-dados_otimismo, dados_risco, ativos_otimismo, ativos_risco = carregar_dados(periodo)
 
-# proteção contra dados vazios
+# ==============================
+# CARREGAR DADOS
+# ==============================
+
+dados_otimismo, dados_risco, ativos_otimismo, ativos_risco = carregar_dados()
+
+# ==============================
+# PROTEÇÃO (EVITA ERRO)
+# ==============================
+
 if dados_otimismo.empty or dados_risco.empty:
-    st.warning("Dados indisponíveis no momento. Tente outro período.")
+    st.warning("Dados indisponíveis no momento. Tente novamente.")
     st.stop()
 
 # ==============================
@@ -99,25 +96,19 @@ dados_otimismo = converter_tz(dados_otimismo)
 dados_risco = converter_tz(dados_risco)
 
 # ==============================
-# LIMPEZA E ALINHAMENTO SEGURO
+# LIMPEZA E ALINHAMENTO (SEGURO)
 # ==============================
 
 dados_otimismo = dados_otimismo.dropna(how="all")
 dados_risco = dados_risco.dropna(how="all")
 
-# mantém apenas timestamps válidos
-dados_otimismo = dados_otimismo[~dados_otimismo.index.duplicated()]
-dados_risco = dados_risco[~dados_risco.index.duplicated()]
-
-# junta sem quebrar
 dados = dados_otimismo.join(dados_risco, how="outer").ffill()
 
-# separa novamente
 dados_otimismo = dados[dados_otimismo.columns]
 dados_risco = dados[dados_risco.columns]
 
 # ==============================
-# VARIAÇÃO
+# VARIAÇÃO %
 # ==============================
 
 def variacao_percentual(serie):
@@ -137,25 +128,17 @@ var_risco = pd.DataFrame({
 # LINHAS
 # ==============================
 
-def linha_ponderada(df, pesos, span=5):
+def linha_ponderada(df, pesos):
     ativos_validos = [a for a in pesos if a in df.columns]
     total_peso = sum(pesos[a] for a in ativos_validos)
 
-    linha = sum(df[a] * pesos[a] for a in ativos_validos) / total_peso
-    return linha.ewm(span=span).mean()
+    return sum(df[a] * pesos[a] for a in ativos_validos) / total_peso
 
 linha_otimismo = linha_ponderada(var_otimismo, ativos_otimismo)
 linha_risco = linha_ponderada(var_risco, ativos_risco)
 
 linha_otimismo.index = linha_otimismo.index.tz_localize(None)
 linha_risco.index = linha_risco.index.tz_localize(None)
-
-# ==============================
-# CONTROLE DE ZOOM
-# ==============================
-
-if "range_x" not in st.session_state:
-    st.session_state.range_x = None
 
 # ==============================
 # GRÁFICO
@@ -182,16 +165,9 @@ fig.add_trace(go.Scatter(
 fig.update_layout(
     template="plotly_dark",
     hovermode="x",
-    uirevision="fix",
-    xaxis=dict(
-        title="Data/Hora",
-        rangeslider=dict(visible=True),
-        range=st.session_state.range_x
-    ),
-    yaxis=dict(
-        title="Força (%)",
-        fixedrange=False
-    )
+    uirevision=True,
+    xaxis=dict(rangeslider=dict(visible=True)),
+    yaxis=dict(title="Força (%)")
 )
 
 st.plotly_chart(
@@ -212,7 +188,7 @@ def gerar_sinal(l_ot, l_rg):
     else:
         return "⚪ NEUTRO"
 
-st.subheader(f"Sinal Geral: {gerar_sinal(linha_otimismo, linha_risco)}")
+st.subheader(f"Sinal: {gerar_sinal(linha_otimismo, linha_risco)}")
 
 # ==============================
 # INFO
