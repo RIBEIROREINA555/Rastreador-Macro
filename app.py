@@ -5,7 +5,29 @@ import plotly.graph_objects as go
 import time
 
 st.set_page_config(layout="wide")
+
+# ==============================
+# TÍTULO
+# ==============================
+
 st.title("Rastreador Macro - Reinaldo")
+
+# ==============================
+# CONTROLE DE ATUALIZAÇÃO
+# ==============================
+
+if "pausado" not in st.session_state:
+    st.session_state.pausado = False
+
+col1, col2 = st.columns(2)
+
+with col1:
+    if st.button("⏸️ Pausar" if not st.session_state.pausado else "▶️ Retomar"):
+        st.session_state.pausado = not st.session_state.pausado
+
+with col2:
+    status = "🔴 PAUSADO" if st.session_state.pausado else "🟢 AO VIVO"
+    st.write(f"Status: **{status}**")
 
 # ==============================
 # SIDEBAR - NOTÍCIAS
@@ -23,7 +45,7 @@ for n in noticias:
     st.sidebar.write(f"{n['hora']} - {n['evento']} {n['impacto']}")
 
 # ==============================
-# PERÍODO (INTELIGENTE)
+# PERÍODO
 # ==============================
 
 opcoes = {
@@ -111,7 +133,7 @@ dados_otimismo = converter_tz(dados_otimismo)
 dados_risco = converter_tz(dados_risco)
 
 # ==============================
-# LIMPEZA SEGURA
+# LIMPEZA
 # ==============================
 
 dados_otimismo = dados_otimismo.dropna(how="all")
@@ -123,7 +145,7 @@ dados_otimismo = dados[dados_otimismo.columns]
 dados_risco = dados[dados_risco.columns]
 
 # ==============================
-# VARIAÇÃO %
+# VARIAÇÃO
 # ==============================
 
 shift_map = {
@@ -153,7 +175,6 @@ var_risco = pd.DataFrame({
 def linha_ponderada(df, pesos):
     ativos_validos = [a for a in pesos if a in df.columns]
     total_peso = sum(pesos[a] for a in ativos_validos)
-
     return sum(df[a] * pesos[a] for a in ativos_validos) / total_peso
 
 linha_otimismo = linha_ponderada(var_otimismo, ativos_otimismo)
@@ -219,8 +240,9 @@ st.subheader(f"Sinal: {gerar_sinal(linha_otimismo, linha_risco)}")
 st.caption(f"🕒 Atualizado às: {pd.Timestamp.now().strftime('%H:%M:%S')}")
 
 # ==============================
-# AUTO REFRESH
+# AUTO REFRESH CONTROLADO
 # ==============================
 
-time.sleep(60)
-st.rerun()
+if not st.session_state.pausado:
+    time.sleep(60)
+    st.rerun()
