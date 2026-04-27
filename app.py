@@ -133,6 +133,14 @@ dados_otimismo = converter_tz(dados_otimismo)
 dados_risco = converter_tz(dados_risco)
 
 # ==============================
+# FILTRAR APENAS HOJE
+# ==============================
+
+hoje = pd.Timestamp.now(tz="America/Sao_Paulo").date()
+
+dados_otimismo = dados_otimismo[dados_otimismo.index.date == hoje]
+dados_risco = dados_risco[dados_risco.index.date == hoje]
+# ==============================
 # LIMPEZA
 # ==============================
 
