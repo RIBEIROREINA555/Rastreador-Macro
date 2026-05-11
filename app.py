@@ -45,7 +45,7 @@ for n in noticias:
     st.sidebar.write(f"{n['hora']} - {n['evento']} {n['impacto']}")
 
 # ==============================
-# PERÍODO
+# PERÍODO E INTERVALO
 # ==============================
 
 opcoes = {
@@ -90,16 +90,28 @@ def carregar_dados(periodo, intervalo):
         "DX-Y.NYB": 2.0
     }
 
+    # --------------------------
+    # DOWNLOAD OTIMISMO
+    # --------------------------
+
     dados_otimismo = yf.download(
-        list(ativos_otimismo.keys()),
+        tickers=list(ativos_otimismo.keys()),
         period=periodo,
-        interval=intervalo
+        interval=intervalo,
+        auto_adjust=True,
+        progress=False
     )["Close"]
 
+    # --------------------------
+    # DOWNLOAD RISCO
+    # --------------------------
+
     dados_risco = yf.download(
-        list(ativos_risco.keys()),
+        tickers=list(ativos_risco.keys()),
         period=periodo,
-        interval=intervalo
+        interval=intervalo,
+        auto_adjust=True,
+        progress=False
     )["Close"]
 
     return dados_otimismo, dados_risco, ativos_otimismo, ativos_risco
@@ -123,37 +135,39 @@ if dados_otimismo.empty or dados_risco.empty:
 # ==============================
 
 def converter_tz(df):
+
     if df.index.tz is None:
         df.index = df.index.tz_localize("UTC").tz_convert("America/Sao_Paulo")
     else:
         df.index = df.index.tz_convert("America/Sao_Paulo")
+
     return df
 
 dados_otimismo = converter_tz(dados_otimismo)
 dados_risco = converter_tz(dados_risco)
 
 # ==============================
-# FILTRAR APENAS HOJE
-# ==============================
-
-hoje = pd.Timestamp.now(tz="America/Sao_Paulo").date()
-
-dados_otimismo = dados_otimismo[dados_otimismo.index.date == hoje]
-dados_risco = dados_risco[dados_risco.index.date == hoje]
-# ==============================
-# LIMPEZA
+# LIMPEZA E ALINHAMENTO
 # ==============================
 
 dados_otimismo = dados_otimismo.dropna(how="all")
 dados_risco = dados_risco.dropna(how="all")
 
-dados = dados_otimismo.join(dados_risco, how="outer").ffill()
+# Junta todos os timestamps
+dados = dados_otimismo.join(dados_risco, how="outer")
 
+# Preenche buracos
+dados = dados.ffill()
+
+# Ordena timestamps
+dados = dados.sort_index()
+
+# Separa novamente
 dados_otimismo = dados[dados_otimismo.columns]
 dados_risco = dados[dados_risco.columns]
 
 # ==============================
-# VARIAÇÃO
+# MAPA DE VARIAÇÃO
 # ==============================
 
 shift_map = {
@@ -163,8 +177,19 @@ shift_map = {
     "30m": 6
 }
 
+# ==============================
+# FUNÇÃO VARIAÇÃO %
+# ==============================
+
 def variacao_percentual(serie):
-    return ((serie / serie.shift(shift_map[intervalo])) - 1) * 100
+
+    shift = shift_map.get(intervalo, 1)
+
+    return ((serie / serie.shift(shift)) - 1) * 100
+
+# ==============================
+# VARIAÇÕES
+# ==============================
 
 var_otimismo = pd.DataFrame({
     ativo: variacao_percentual(dados_otimismo[ativo]).fillna(0)
@@ -177,17 +202,26 @@ var_risco = pd.DataFrame({
 })
 
 # ==============================
-# LINHAS
+# LINHA PONDERADA
 # ==============================
 
 def linha_ponderada(df, pesos):
+
     ativos_validos = [a for a in pesos if a in df.columns]
+
     total_peso = sum(pesos[a] for a in ativos_validos)
-    return sum(df[a] * pesos[a] for a in ativos_validos) / total_peso
+
+    linha = sum(
+        df[a] * pesos[a]
+        for a in ativos_validos
+    ) / total_peso
+
+    return linha
 
 linha_otimismo = linha_ponderada(var_otimismo, ativos_otimismo)
 linha_risco = linha_ponderada(var_risco, ativos_risco)
 
+# Remove timezone do gráfico
 linha_otimismo.index = linha_otimismo.index.tz_localize(None)
 linha_risco.index = linha_risco.index.tz_localize(None)
 
@@ -197,34 +231,65 @@ linha_risco.index = linha_risco.index.tz_localize(None)
 
 fig = go.Figure()
 
+# Linha otimista
 fig.add_trace(go.Scatter(
     x=linha_otimismo.index,
     y=linha_otimismo,
     mode="lines",
-    name="Otimismo",
+    name="🟢 Otimismo",
     line=dict(color="green", width=2)
 ))
 
+# Linha risco
 fig.add_trace(go.Scatter(
     x=linha_risco.index,
     y=linha_risco,
     mode="lines",
-    name="Risco",
+    name="🔴 Risco",
     line=dict(color="red", width=2)
 ))
 
-fig.update_layout(
-    template="plotly_dark",
-    hovermode="x",
-    uirevision=True,
-    xaxis=dict(rangeslider=dict(visible=True)),
-    yaxis=dict(title="Força (%)")
+# Linha zero
+fig.add_hline(
+    y=0,
+    line_dash="dot",
+    line_color="gray"
 )
 
+# Layout
+fig.update_layout(
+    template="plotly_dark",
+    hovermode="x unified",
+    uirevision=True,
+    height=700,
+
+    xaxis=dict(
+        rangeslider=dict(visible=True),
+        showgrid=False
+    ),
+
+    yaxis=dict(
+        title="Força (%)",
+        showgrid=True
+    ),
+
+    legend=dict(
+        orientation="h",
+        yanchor="bottom",
+        y=1.02,
+        xanchor="right",
+        x=1
+    )
+)
+
+# Exibir gráfico
 st.plotly_chart(
     fig,
     use_container_width=True,
-    config={"scrollZoom": True}
+    config={
+        "scrollZoom": True,
+        "displaylogo": False
+    }
 )
 
 # ==============================
@@ -232,25 +297,38 @@ st.plotly_chart(
 # ==============================
 
 def gerar_sinal(l_ot, l_rg):
-    if l_ot.iloc[-1] > l_rg.iloc[-1]:
+
+    ultimo_ot = l_ot.iloc[-1]
+    ultimo_rg = l_rg.iloc[-1]
+
+    if ultimo_ot > ultimo_rg:
         return "🟢 COMPRA"
-    elif l_rg.iloc[-1] > l_ot.iloc[-1]:
+
+    elif ultimo_rg > ultimo_ot:
         return "🔴 VENDA"
+
     else:
         return "⚪ NEUTRO"
 
-st.subheader(f"Sinal: {gerar_sinal(linha_otimismo, linha_risco)}")
+sinal = gerar_sinal(linha_otimismo, linha_risco)
+
+st.subheader(f"Sinal Atual: {sinal}")
 
 # ==============================
-# INFO
+# INFORMAÇÕES
 # ==============================
 
-st.caption(f"🕒 Atualizado às: {pd.Timestamp.now().strftime('%H:%M:%S')}")
+st.caption(
+    f"🕒 Atualizado às: "
+    f"{pd.Timestamp.now().strftime('%H:%M:%S')}"
+)
 
 # ==============================
-# AUTO REFRESH CONTROLADO
+# AUTO REFRESH
 # ==============================
 
 if not st.session_state.pausado:
+
     time.sleep(60)
+
     st.rerun()
