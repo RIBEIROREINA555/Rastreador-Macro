@@ -4,6 +4,10 @@ import streamlit as st
 import plotly.graph_objects as go
 import time
 
+# ==================================================
+# CONFIG
+# ==================================================
+
 st.set_page_config(layout="wide")
 
 # ==================================================
@@ -29,7 +33,9 @@ with col1:
         else "▶️ Retomar"
     ):
 
-        st.session_state.pausado = not st.session_state.pausado
+        st.session_state.pausado = (
+            not st.session_state.pausado
+        )
 
 with col2:
 
@@ -48,19 +54,33 @@ with col2:
 st.sidebar.title("📰 Notícias do Mercado")
 
 noticias = [
-    {"hora": "09:00", "evento": "Payroll EUA", "impacto": "⭐⭐⭐"},
-    {"hora": "10:30", "evento": "Petróleo", "impacto": "⭐⭐"},
-    {"hora": "15:00", "evento": "Juros", "impacto": "⭐⭐⭐"},
+    {
+        "hora": "09:00",
+        "evento": "Payroll EUA",
+        "impacto": "⭐⭐⭐"
+    },
+    {
+        "hora": "10:30",
+        "evento": "Petróleo",
+        "impacto": "⭐⭐"
+    },
+    {
+        "hora": "15:00",
+        "evento": "Juros",
+        "impacto": "⭐⭐⭐"
+    }
 ]
 
 for n in noticias:
 
     st.sidebar.write(
-        f"{n['hora']} - {n['evento']} {n['impacto']}"
+        f"{n['hora']} - "
+        f"{n['evento']} "
+        f"{n['impacto']}"
     )
 
 # ==================================================
-# PERÍODOS
+# PERÍODO
 # ==================================================
 
 opcoes = {
@@ -90,7 +110,7 @@ intervalo = opcoes[periodo]
 # ==================================================
 
 @st.cache_data(ttl=60)
-def carregar_dados(periodo, intervalo):
+def carregar_dados():
 
     # ==============================================
     # OTIMISMO
@@ -98,13 +118,15 @@ def carregar_dados(periodo, intervalo):
 
     ativos_otimismo = {
 
-        # EUA
-        "ES=F": 2.5,       # S&P
-        "NQ=F": 2.5,       # Nasdaq
-        "RTY=F": 1.5,      # Russell
-        "BZ=F": 1.8,       # Petróleo
+        # FUTUROS EUA
+        "ES=F": 2.5,
+        "NQ=F": 2.5,
+        "RTY=F": 1.5,
 
-        # ADRs BR nos EUA
+        # COMMODITIES
+        "BZ=F": 1.8,
+
+        # ADRS BR
         "VALE": 2.2,
         "PBR": 2.2,
         "ITUB": 1.8,
@@ -132,46 +154,144 @@ def carregar_dados(periodo, intervalo):
 
     ativos_pessimismo = {
 
-        # Volatilidade
+        # VOLATILIDADE
         "^VIX": 2.5,
 
-        # Dólar index
-        "DX-Y.NYB": 2.5,
-
-        # Bonds EUA
-        "TLT": 2.0,
-
-        # Juros EUA
-        "^TNX": 2.0,       # 10 anos
-        "^IRX": 1.8,       # curto prazo
+        # DÓLAR GLOBAL
+        "DX-Y.NYB": 2.0,
 
         # USD/BRL
-        "BRL=X": 2.5,
+        "BRL=X": 3.0,
 
-        # ETFs defensivos
+        # BONDS
+        "TLT": 1.8,
+        "IEF": 1.5,
+
+        # ETFs DEFENSIVOS
         "UUP": 1.5,
-        "IEF": 1.5
+
+        # OURO
+        "GC=F": 1.8,
+
+        # RENDA FIXA BR
+        "B5P211.SA": 2.0,
+
+        # SMALL CAPS
+        "SMAL11.SA": 1.5,
+
+        # JUROS EUA
+        "^TNX": 2.0,
+        "^IRX": 1.5
     }
 
     # ==============================================
-    # DOWNLOAD
+    # DOWNLOAD OTIMISMO
     # ==============================================
 
     dados_otimismo = yf.download(
         tickers=list(ativos_otimismo.keys()),
-        period=periodo,
-        interval=intervalo,
+        period="1d",
+        interval="1m",
         auto_adjust=True,
         progress=False
     )["Close"]
 
+    # ==============================================
+    # DOWNLOAD PESSIMISMO
+    # ==============================================
+
     dados_pessimismo = yf.download(
         tickers=list(ativos_pessimismo.keys()),
-        period=periodo,
-        interval=intervalo,
+        period="5d",
+        interval="5m",
         auto_adjust=True,
         progress=False
     )["Close"]
+
+    # ==============================================
+    # TIMEZONE
+    # ==============================================
+
+    def converter_tz(df):
+
+        if df.index.tz is None:
+
+            df.index = (
+                df.index
+                .tz_localize("UTC")
+                .tz_convert("America/Sao_Paulo")
+            )
+
+        else:
+
+            df.index = (
+                df.index
+                .tz_convert("America/Sao_Paulo")
+            )
+
+        return df
+
+    dados_otimismo = converter_tz(
+        dados_otimismo
+    )
+
+    dados_pessimismo = converter_tz(
+        dados_pessimismo
+    )
+
+    # ==============================================
+    # ÚLTIMAS 12 HORAS
+    # ==============================================
+
+    agora = pd.Timestamp.now(
+        tz="America/Sao_Paulo"
+    )
+
+    limite_12h = (
+        agora - pd.Timedelta(hours=12)
+    )
+
+    # JUROS NÃO SERÃO FILTRADOS
+    juros = ["^TNX", "^IRX"]
+
+    # OTIMISMO
+    dados_otimismo = dados_otimismo[
+        dados_otimismo.index >= limite_12h
+    ]
+
+    # SEPARAR JUROS
+    colunas_juros = [
+
+        c for c in dados_pessimismo.columns
+
+        if c in juros
+    ]
+
+    colunas_normais = [
+
+        c for c in dados_pessimismo.columns
+
+        if c not in juros
+    ]
+
+    dados_juros = (
+        dados_pessimismo[colunas_juros]
+    )
+
+    dados_normais = (
+        dados_pessimismo[colunas_normais]
+    )
+
+    # FILTRO 12H
+    dados_normais = dados_normais[
+        dados_normais.index >= limite_12h
+    ]
+
+    # JUNTA NOVAMENTE
+    dados_pessimismo = pd.concat(
+        [dados_normais, dados_juros],
+        axis=1
+    )
 
     return (
         dados_otimismo,
@@ -189,52 +309,35 @@ def carregar_dados(periodo, intervalo):
     dados_pessimismo,
     ativos_otimismo,
     ativos_pessimismo
-) = carregar_dados(periodo, intervalo)
+) = carregar_dados()
 
 # ==================================================
 # PROTEÇÃO
 # ==================================================
 
-if dados_otimismo.empty or dados_pessimismo.empty:
+if (
+    dados_otimismo.empty
+    or
+    dados_pessimismo.empty
+):
 
     st.warning(
-        "Dados indisponíveis. Tente novamente."
+        "Dados indisponíveis."
     )
 
     st.stop()
 
 # ==================================================
-# TIMEZONE
-# ==================================================
-
-def converter_tz(df):
-
-    if df.index.tz is None:
-
-        df.index = (
-            df.index
-            .tz_localize("UTC")
-            .tz_convert("America/Sao_Paulo")
-        )
-
-    else:
-
-        df.index = (
-            df.index
-            .tz_convert("America/Sao_Paulo")
-        )
-
-    return df
-
-dados_otimismo = converter_tz(dados_otimismo)
-dados_pessimismo = converter_tz(dados_pessimismo)
-
-# ==================================================
 # LIMPEZA
 # ==================================================
 
-dados_otimismo = dados_otimismo.dropna(how="all")
-dados_pessimismo = dados_pessimismo.dropna(how="all")
+dados_otimismo = (
+    dados_otimismo.dropna(how="all")
+)
+
+dados_pessimismo = (
+    dados_pessimismo.dropna(how="all")
+)
 
 dados = dados_otimismo.join(
     dados_pessimismo,
@@ -245,9 +348,13 @@ dados = dados.ffill()
 
 dados = dados.sort_index()
 
-dados_otimismo = dados[dados_otimismo.columns]
+dados_otimismo = (
+    dados[dados_otimismo.columns]
+)
 
-dados_pessimismo = dados[dados_pessimismo.columns]
+dados_pessimismo = (
+    dados[dados_pessimismo.columns]
+)
 
 # ==================================================
 # SHIFT
@@ -264,13 +371,33 @@ shift_map = {
 # VARIAÇÃO
 # ==================================================
 
-def variacao_percentual(serie):
+ativos_invertidos = [
+    "^VIX",
+    "DX-Y.NYB",
+    "BRL=X",
+    "^TNX",
+    "^IRX",
+    "UUP"
+]
+
+def variacao_percentual(
+    serie,
+    nome_ativo
+):
 
     shift = shift_map.get(intervalo, 1)
 
-    return (
-        ((serie / serie.shift(shift)) - 1) * 100
+    variacao = (
+        ((serie / serie.shift(shift)) - 1)
+        * 100
     )
+
+    # INVERTER ATIVOS DE MEDO
+    if nome_ativo in ativos_invertidos:
+
+        variacao = variacao * -1
+
+    return variacao
 
 # ==================================================
 # VARIAÇÕES
@@ -279,7 +406,8 @@ def variacao_percentual(serie):
 var_otimismo = pd.DataFrame({
 
     ativo: variacao_percentual(
-        dados_otimismo[ativo]
+        dados_otimismo[ativo],
+        ativo
     ).fillna(0)
 
     for ativo in ativos_otimismo
@@ -288,7 +416,8 @@ var_otimismo = pd.DataFrame({
 var_pessimismo = pd.DataFrame({
 
     ativo: variacao_percentual(
-        dados_pessimismo[ativo]
+        dados_pessimismo[ativo],
+        ativo
     ).fillna(0)
 
     for ativo in ativos_pessimismo
@@ -301,7 +430,9 @@ var_pessimismo = pd.DataFrame({
 def linha_ponderada(df, pesos):
 
     ativos_validos = [
+
         a for a in pesos
+
         if a in df.columns
     ]
 
@@ -311,8 +442,11 @@ def linha_ponderada(df, pesos):
     )
 
     linha = sum(
+
         df[a] * pesos[a]
+
         for a in ativos_validos
+
     ) / total_peso
 
     return linha
@@ -394,7 +528,9 @@ fig.update_layout(
     height=700,
 
     xaxis=dict(
-        rangeslider=dict(visible=True),
+        rangeslider=dict(
+            visible=True
+        ),
         showgrid=False
     ),
 
@@ -426,17 +562,24 @@ st.plotly_chart(
 # SINAL
 # ==================================================
 
-def gerar_sinal(l_ot, l_ps):
+def gerar_sinal(
+    linha_otimismo,
+    linha_pessimismo
+):
 
-    ultimo_ot = l_ot.iloc[-1]
+    ultimo_otimismo = (
+        linha_otimismo.iloc[-1]
+    )
 
-    ultimo_ps = l_ps.iloc[-1]
+    ultimo_pessimismo = (
+        linha_pessimismo.iloc[-1]
+    )
 
-    if ultimo_ot > ultimo_ps:
+    if ultimo_otimismo > ultimo_pessimismo:
 
         return "🟢 COMPRA"
 
-    elif ultimo_ps > ultimo_ot:
+    elif ultimo_pessimismo > ultimo_otimismo:
 
         return "🔴 VENDA"
 
@@ -449,14 +592,18 @@ sinal = gerar_sinal(
     linha_pessimismo
 )
 
-st.subheader(f"Sinal Atual: {sinal}")
+st.subheader(
+    f"Sinal Atual: {sinal}"
+)
 
 # ==================================================
 # INFO
 # ==================================================
 
 st.caption(
+
     f"🕒 Atualizado às: "
+
     f"{pd.Timestamp.now().strftime('%H:%M:%S')}"
 )
 
