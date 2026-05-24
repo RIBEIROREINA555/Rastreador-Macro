@@ -17,7 +17,7 @@ st.set_page_config(
 st.title("📊 Rastreador Macro - Reinaldo")
 
 # =========================================================
-# STATUS
+# CONTROLE
 # =========================================================
 
 if "pausado" not in st.session_state:
@@ -63,10 +63,10 @@ INTERVALO = "5m"
 SHIFT = 12
 
 # =========================================================
-# FLUXO GLOBAL
+# OTIMISMO (WIN)
 # =========================================================
 
-ativos_global = {
+ativos_otimismo = {
 
     # S&P FUTURO
     "ES=F": 3.5,
@@ -77,7 +77,7 @@ ativos_global = {
     # SMALL CAPS EUA
     "RTY=F": 1.5,
 
-    # BRASIL ANTECIPADO
+    # ETF BRASIL
     "EWZ": 3.0,
 
     # PETRÓLEO
@@ -88,25 +88,19 @@ ativos_global = {
 }
 
 # =========================================================
-# FLUXO BRASIL
+# PESSIMISMO (WDO)
 # =========================================================
 
-ativos_brasil = {
+ativos_pessimismo = {
 
-    # PETROBRAS
-    "PETR4.SA": 3.0,
+    # DÓLAR BR
+    "USDBRL=X": 4.0,
 
-    # VALE
-    "VALE3.SA": 3.0,
+    # DÓLAR GLOBAL
+    "DX-Y.NYB": 3.0,
 
-    # ITAÚ
-    "ITUB4.SA": 2.0,
-
-    # BRADESCO
-    "BBDC4.SA": 1.5,
-
-    # SMALL CAPS
-    "SMAL11.SA": 1.5
+    # JUROS EUA
+    "^TNX": 3.5
 }
 
 # =========================================================
@@ -115,14 +109,14 @@ ativos_brasil = {
 
 ativos_macro = {
 
-    # DÓLAR
-    "USDBRL=X": 4.0,
-
-    # JUROS EUA
-    "^TNX": 3.5,
+    # JUROS LONGOS EUA
+    "^TNX": 4.0,
 
     # DÓLAR GLOBAL
-    "DX-Y.NYB": 2.5
+    "DX-Y.NYB": 3.5,
+
+    # DÓLAR BR
+    "USDBRL=X": 2.5
 }
 
 # =========================================================
@@ -137,9 +131,9 @@ def carregar_dados():
 
         set(
 
-            list(ativos_global.keys())
+            list(ativos_otimismo.keys())
             +
-            list(ativos_brasil.keys())
+            list(ativos_pessimismo.keys())
             +
             list(ativos_macro.keys())
         )
@@ -168,9 +162,9 @@ def carregar_dados():
 
         try:
 
-            serie = dados[ticker]["Close"]
-
-            closes[ticker] = serie
+            closes[ticker] = (
+                dados[ticker]["Close"]
+            )
 
         except:
 
@@ -222,23 +216,23 @@ def retorno_log(serie):
 # DATAFRAMES
 # =========================================================
 
-df_global = pd.DataFrame()
+df_otimismo = pd.DataFrame()
 
-for ativo in ativos_global:
+for ativo in ativos_otimismo:
 
     if ativo in dados.columns:
 
-        df_global[ativo] = (
+        df_otimismo[ativo] = (
             retorno_log(dados[ativo])
         )
 
-df_brasil = pd.DataFrame()
+df_pessimismo = pd.DataFrame()
 
-for ativo in ativos_brasil:
+for ativo in ativos_pessimismo:
 
     if ativo in dados.columns:
 
-        df_brasil[ativo] = (
+        df_pessimismo[ativo] = (
             retorno_log(dados[ativo])
         )
 
@@ -270,9 +264,9 @@ def limpar(df):
         .fillna(0)
     )
 
-df_global = limpar(df_global)
+df_otimismo = limpar(df_otimismo)
 
-df_brasil = limpar(df_brasil)
+df_pessimismo = limpar(df_pessimismo)
 
 df_macro = limpar(df_macro)
 
@@ -313,14 +307,14 @@ def linha_ponderada(
 # LINHAS
 # =========================================================
 
-linha_global = linha_ponderada(
-    df_global,
-    ativos_global
+linha_otimismo = linha_ponderada(
+    df_otimismo,
+    ativos_otimismo
 )
 
-linha_brasil = linha_ponderada(
-    df_brasil,
-    ativos_brasil
+linha_pessimismo = linha_ponderada(
+    df_pessimismo,
+    ativos_pessimismo
 )
 
 linha_macro = linha_ponderada(
@@ -332,37 +326,33 @@ linha_macro = linha_ponderada(
 # SUAVIZAÇÃO
 # =========================================================
 
-linha_global = (
-    linha_global
+linha_otimismo = (
+
+    linha_otimismo
+
     .rolling(3)
+
     .mean()
 )
 
-linha_brasil = (
-    linha_brasil
+linha_pessimismo = (
+
+    linha_pessimismo
+
     .rolling(3)
+
     .mean()
 )
+
+# PRESSÃO MACRO MAIS SUAVE
 
 linha_macro = (
+
     linha_macro
-    .rolling(3)
+
+    .rolling(6)
+
     .mean()
-)
-
-# =========================================================
-# FORÇA LÍQUIDA
-# =========================================================
-
-forca_liquida = (
-
-    linha_global
-    +
-    linha_brasil
-
-    -
-
-    linha_macro
 )
 
 # =========================================================
@@ -371,23 +361,18 @@ forca_liquida = (
 
 try:
 
-    linha_global.index = (
-        linha_global.index
+    linha_otimismo.index = (
+        linha_otimismo.index
         .tz_localize(None)
     )
 
-    linha_brasil.index = (
-        linha_brasil.index
+    linha_pessimismo.index = (
+        linha_pessimismo.index
         .tz_localize(None)
     )
 
     linha_macro.index = (
         linha_macro.index
-        .tz_localize(None)
-    )
-
-    forca_liquida.index = (
-        forca_liquida.index
         .tz_localize(None)
     )
 
@@ -402,20 +387,20 @@ except:
 fig = go.Figure()
 
 # =========================================================
-# GLOBAL
+# OTIMISMO
 # =========================================================
 
 fig.add_trace(
 
     go.Scatter(
 
-        x=linha_global.index,
+        x=linha_otimismo.index,
 
-        y=linha_global,
+        y=linha_otimismo,
 
         mode="lines",
 
-        name="🟢 Fluxo Global",
+        name="🟢 Otimismo (WIN)",
 
         line=dict(
             color="lime",
@@ -425,30 +410,30 @@ fig.add_trace(
 )
 
 # =========================================================
-# BRASIL
+# PESSIMISMO
 # =========================================================
 
 fig.add_trace(
 
     go.Scatter(
 
-        x=linha_brasil.index,
+        x=linha_pessimismo.index,
 
-        y=linha_brasil,
+        y=linha_pessimismo,
 
         mode="lines",
 
-        name="🔵 Fluxo Brasil",
+        name="🔴 Pessimismo (WDO)",
 
         line=dict(
-            color="cyan",
+            color="red",
             width=3
         )
     )
 )
 
 # =========================================================
-# MACRO
+# PRESSÃO MACRO
 # =========================================================
 
 fig.add_trace(
@@ -461,38 +446,15 @@ fig.add_trace(
 
         mode="lines",
 
-        name="🔴 Pressão Macro",
+        name="🟠 Pressão Macro",
 
         line=dict(
-            color="red",
-            width=2
-        )
-    )
-)
-
-# =========================================================
-# FORÇA LÍQUIDA
-# =========================================================
-
-fig.add_trace(
-
-    go.Scatter(
-
-        x=forca_liquida.index,
-
-        y=forca_liquida,
-
-        mode="lines",
-
-        name="⚪ Força Líquida",
-
-        opacity=0.5,
-
-        line=dict(
-            color="white",
-            width=1,
+            color="orange",
+            width=2,
             dash="dot"
-        )
+        ),
+
+        opacity=0.8
     )
 )
 
@@ -575,48 +537,73 @@ st.plotly_chart(
 # SINAL
 # =========================================================
 
-ultimo = forca_liquida.iloc[-1]
+ultimo_otimismo = (
+    linha_otimismo.iloc[-1]
+)
 
-if ultimo > 0.20:
+ultimo_pessimismo = (
+    linha_pessimismo.iloc[-1]
+)
 
-    sinal = "🟢 COMPRA"
+ultimo_macro = (
+    linha_macro.iloc[-1]
+)
 
-elif ultimo < -0.20:
+# =========================================================
+# LEITURA
+# =========================================================
 
-    sinal = "🔴 VENDA"
+if (
+
+    ultimo_otimismo > ultimo_pessimismo
+    and
+    ultimo_macro < 0
+
+):
+
+    leitura = "🟢 Ambiente favorável para WIN"
+
+elif (
+
+    ultimo_pessimismo > ultimo_otimismo
+    and
+    ultimo_macro > 0
+
+):
+
+    leitura = "🔴 Ambiente favorável para WDO"
 
 else:
 
-    sinal = "⚪ NEUTRO"
+    leitura = "⚪ Ambiente misto"
 
-st.subheader(
-    f"Sinal Atual: {sinal}"
-)
+st.subheader(leitura)
 
 # =========================================================
 # MÉTRICAS
 # =========================================================
 
-c1, c2, c3, c4 = st.columns(4)
+c1, c2, c3 = st.columns(3)
 
 c1.metric(
-    "🟢 Global",
-    f"{linha_global.iloc[-1]:.2f}"
+
+    "🟢 Otimismo",
+
+    f"{linha_otimismo.iloc[-1]:.2f}"
 )
 
 c2.metric(
-    "🔵 Brasil",
-    f"{linha_brasil.iloc[-1]:.2f}"
+
+    "🔴 Pessimismo",
+
+    f"{linha_pessimismo.iloc[-1]:.2f}"
 )
 
 c3.metric(
-    "🔴 Macro",
-    f"{linha_macro.iloc[-1]:.2f}"
-)
 
-c4.metric(
-    "⚪ Líquida",
-    f"{forca_liquida.iloc[-1]:.2f}"
+    "🟠 Pressão Macro",
+
+    f"{linha_macro.iloc[-1]:.2f}"
 )
 
 # =========================================================
