@@ -58,7 +58,7 @@ INTERVALO = "5m"
 # SHIFT
 # =========================================================
 
-# 12 candles de 5m = 1 hora
+# 12 candles de 5 minutos = 1 hora
 
 SHIFT = 12
 
@@ -109,7 +109,7 @@ ativos_pessimismo = {
 
 ativos_macro = {
 
-    # JUROS LONGOS EUA
+    # JUROS EUA
     "^TNX": 4.0,
 
     # DÓLAR GLOBAL
@@ -158,6 +158,10 @@ def carregar_dados():
 
     closes = pd.DataFrame()
 
+    # =====================================================
+    # EXTRAIR CLOSE
+    # =====================================================
+
     for ticker in tickers:
 
         try:
@@ -170,6 +174,10 @@ def carregar_dados():
 
             pass
 
+    # =====================================================
+    # LIMPEZA
+    # =====================================================
+
     closes = closes.dropna(
         axis=1,
         how="all"
@@ -179,10 +187,40 @@ def carregar_dados():
 
     closes = closes.ffill()
 
+    # =====================================================
+    # TIMEZONE BRASIL
+    # =====================================================
+
+    try:
+
+        if closes.index.tz is None:
+
+            closes.index = (
+
+                closes.index
+
+                .tz_localize("UTC")
+
+                .tz_convert("America/Sao_Paulo")
+            )
+
+        else:
+
+            closes.index = (
+
+                closes.index
+
+                .tz_convert("America/Sao_Paulo")
+            )
+
+    except:
+
+        pass
+
     return closes
 
 # =========================================================
-# CARREGAR
+# CARREGAR DADOS
 # =========================================================
 
 dados = carregar_dados()
@@ -286,7 +324,7 @@ def linha_ponderada(
         if a in df.columns
     ]
 
-    total = sum(
+    total_peso = sum(
 
         pesos[a]
 
@@ -299,7 +337,7 @@ def linha_ponderada(
 
         for a in ativos_validos
 
-    ) / total
+    ) / total_peso
 
     return linha
 
@@ -344,7 +382,7 @@ linha_pessimismo = (
     .mean()
 )
 
-# PRESSÃO MACRO MAIS SUAVE
+# MACRO MAIS SUAVE
 
 linha_macro = (
 
@@ -356,7 +394,7 @@ linha_macro = (
 )
 
 # =========================================================
-# REMOVER TZ
+# REMOVER TIMEZONE
 # =========================================================
 
 try:
@@ -448,13 +486,13 @@ fig.add_trace(
 
         name="🟠 Pressão Macro",
 
+        opacity=0.8,
+
         line=dict(
             color="orange",
             width=2,
             dash="dot"
-        ),
-
-        opacity=0.8
+        )
     )
 )
 
@@ -534,7 +572,7 @@ st.plotly_chart(
 )
 
 # =========================================================
-# SINAL
+# LEITURA
 # =========================================================
 
 ultimo_otimismo = (
@@ -550,7 +588,7 @@ ultimo_macro = (
 )
 
 # =========================================================
-# LEITURA
+# INTERPRETAÇÃO
 # =========================================================
 
 if (
@@ -607,12 +645,12 @@ c3.metric(
 )
 
 # =========================================================
-# HORÁRIO
+# INFO
 # =========================================================
 
 st.caption(
 
-    f"🕒 Atualizado às "
+    f"🕒 Horário de Brasília | Atualizado às "
 
     f"{pd.Timestamp.now().strftime('%H:%M:%S')}"
 )
