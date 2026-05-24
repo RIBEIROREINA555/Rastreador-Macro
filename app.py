@@ -1,24 +1,24 @@
 import yfinance as yf
 import pandas as pd
+import numpy as np
 import streamlit as st
 import plotly.graph_objects as go
 import time
 
-# ==================================================
+# =========================================================
 # CONFIG
-# ==================================================
+# =========================================================
 
-st.set_page_config(layout="wide")
+st.set_page_config(
+    page_title="Rastreador Macro - Reinaldo",
+    layout="wide"
+)
 
-# ==================================================
-# TÍTULO
-# ==================================================
+st.title("📊 Rastreador Macro - Reinaldo")
 
-st.title("Rastreador Macro - Reinaldo")
-
-# ==================================================
+# =========================================================
 # CONTROLE
-# ==================================================
+# =========================================================
 
 if "pausado" not in st.session_state:
     st.session_state.pausado = False
@@ -45,43 +45,11 @@ with col2:
         else "🟢 AO VIVO"
     )
 
-    st.write(f"Status: **{status}**")
+    st.markdown(f"### {status}")
 
-# ==================================================
-# SIDEBAR
-# ==================================================
-
-st.sidebar.title("📰 Notícias do Mercado")
-
-noticias = [
-    {
-        "hora": "09:00",
-        "evento": "Payroll EUA",
-        "impacto": "⭐⭐⭐"
-    },
-    {
-        "hora": "10:30",
-        "evento": "Petróleo",
-        "impacto": "⭐⭐"
-    },
-    {
-        "hora": "15:00",
-        "evento": "Juros",
-        "impacto": "⭐⭐⭐"
-    }
-]
-
-for n in noticias:
-
-    st.sidebar.write(
-        f"{n['hora']} - "
-        f"{n['evento']} "
-        f"{n['impacto']}"
-    )
-
-# ==================================================
+# =========================================================
 # PERÍODO
-# ==================================================
+# =========================================================
 
 opcoes = {
     "1d": "1m",
@@ -91,7 +59,7 @@ opcoes = {
 }
 
 if "periodo" not in st.session_state:
-    st.session_state.periodo = "1d"
+    st.session_state.periodo = "5d"
 
 periodo = st.selectbox(
     "Período",
@@ -105,143 +73,174 @@ st.session_state.periodo = periodo
 
 intervalo = opcoes[periodo]
 
-# ==================================================
-# CACHE
-# ==================================================
+# =========================================================
+# SHIFT
+# =========================================================
+
+shift_map = {
+    "1m": 180,
+    "5m": 36,
+    "15m": 12,
+    "30m": 6
+}
+
+shift = shift_map.get(intervalo, 1)
+
+# =========================================================
+# ATIVOS
+# =========================================================
+
+# =========================================================
+# OTIMISMO
+# =========================================================
+
+ativos_otimismo = {
+
+    # FUTUROS EUA
+    "ES=F": 3.0,
+    "NQ=F": 3.0,
+    "RTY=F": 1.5,
+
+    # BRASIL
+    "EWZ": 2.5,
+    "VALE": 2.0,
+    "PBR": 2.0,
+    "ITUB": 1.8,
+
+    # B3
+    "VALE3.SA": 2.0,
+    "PETR4.SA": 2.0,
+    "ITUB4.SA": 1.8,
+    "BBDC4.SA": 1.5,
+    "BBAS3.SA": 1.5,
+    "WEGE3.SA": 1.5,
+    "SMAL11.SA": 1.3,
+
+    # SEMICONDUTORES
+    "SOXX": 2.0,
+
+    # BANCOS EUA
+    "XLF": 1.5,
+
+    # HIGH YIELD
+    "HYG": 1.5
+}
+
+# =========================================================
+# PESSIMISMO
+# =========================================================
+
+ativos_pessimismo = {
+
+    # VOLATILIDADE
+    "^VIX": 3.0,
+
+    # DÓLAR GLOBAL
+    "DX-Y.NYB": 3.0,
+
+    # DÓLAR BR
+    "USDBRL=X": 3.5,
+
+    # JUROS EUA
+    "^TNX": 3.0,
+    "^TYX": 2.5,
+
+    # OURO
+    "GC=F": 1.5,
+
+    # DÓLAR ETF
+    "UUP": 1.5
+}
+
+# =========================================================
+# DOWNLOAD
+# =========================================================
 
 @st.cache_data(ttl=60)
+
 def carregar_dados():
 
-    # ==============================================
-    # OTIMISMO
-    # ==============================================
+    tickers = list(
+        set(
+            list(ativos_otimismo.keys())
+            +
+            list(ativos_pessimismo.keys())
+        )
+    )
 
-    ativos_otimismo = {
+    try:
 
-        # FUTUROS EUA
-        "ES=F": 2.5,
-        "NQ=F": 2.5,
-        "RTY=F": 1.5,
+        dados = yf.download(
 
-        # COMMODITIES
-        "BZ=F": 1.8,
+            tickers=tickers,
 
-        # ADRS BR
-        "VALE": 2.2,
-        "PBR": 2.2,
-        "ITUB": 1.8,
-        "BBD": 1.5,
+            period=periodo,
 
-        # B3
-        "VALE3.SA": 2.0,
-        "PETR4.SA": 2.0,
-        "ITUB4.SA": 1.8,
-        "BBDC4.SA": 1.5,
-        "BBAS3.SA": 1.4,
-        "ABEV3.SA": 1.2,
-        "WEGE3.SA": 1.8,
-        "SUZB3.SA": 1.5,
-        "JBSS3.SA": 1.5,
-        "RENT3.SA": 1.4,
-        "LREN3.SA": 1.2,
-        "MGLU3.SA": 1.0,
-        "RADL3.SA": 1.0
-    }
+            interval=intervalo,
 
-    # ==============================================
-    # PESSIMISMO
-    # ==============================================
+            auto_adjust=True,
 
-    ativos_pessimismo = {
+            progress=False,
 
-        # VOLATILIDADE
-        "^VIX": 2.5,
+            group_by="ticker",
 
-        # DÓLAR GLOBAL
-        "DX-Y.NYB": 2.0,
+            threads=True
+        )
 
-        # USD/BRL
-        "BRL=X": 3.0,
+    except Exception as e:
 
-        # BONDS
-        "TLT": 1.8,
-        "IEF": 1.5,
+        st.error(f"Erro no download: {e}")
 
-        # ETFs DEFENSIVOS
-        "UUP": 1.5,
+        return None
 
-        # OURO
-        "GC=F": 1.8,
+    # =====================================================
+    # EXTRAIR CLOSE
+    # =====================================================
 
-        # RENDA FIXA BR
-        "B5P211.SA": 2.0,
+    closes = pd.DataFrame()
 
-        # SMALL CAPS
-        "SMAL11.SA": 1.5,
+    for ticker in tickers:
 
-        # JUROS EUA
-        "^TNX": 2.0,
-        "^IRX": 1.5
-    }
+        try:
 
-    # ==============================================
-    # DOWNLOAD OTIMISMO
-    # ==============================================
+            closes[ticker] = dados[ticker]["Close"]
 
-    dados_otimismo = yf.download(
-        tickers=list(ativos_otimismo.keys()),
-        period="1d",
-        interval="1m",
-        auto_adjust=True,
-        progress=False
-    )["Close"]
+        except:
 
-    # ==============================================
-    # DOWNLOAD PESSIMISMO
-    # ==============================================
+            pass
 
-    dados_pessimismo = yf.download(
-        tickers=list(ativos_pessimismo.keys()),
-        period="5d",
-        interval="5m",
-        auto_adjust=True,
-        progress=False
-    )["Close"]
+    if closes.empty:
 
-    # ==============================================
+        return None
+
+    # =====================================================
     # TIMEZONE
-    # ==============================================
+    # =====================================================
 
-    def converter_tz(df):
+    try:
 
-        if df.index.tz is None:
+        if closes.index.tz is None:
 
-            df.index = (
-                df.index
+            closes.index = (
+                closes.index
                 .tz_localize("UTC")
                 .tz_convert("America/Sao_Paulo")
             )
 
         else:
 
-            df.index = (
-                df.index
+            closes.index = (
+                closes.index
                 .tz_convert("America/Sao_Paulo")
             )
 
-        return df
+    except:
 
-    dados_otimismo = converter_tz(
-        dados_otimismo
-    )
+        pass
 
-    dados_pessimismo = converter_tz(
-        dados_pessimismo
-    )
-
-    # ==============================================
+    # =====================================================
     # ÚLTIMAS 12 HORAS
-    # ==============================================
+    # =====================================================
 
     agora = pd.Timestamp.now(
         tz="America/Sao_Paulo"
@@ -251,183 +250,125 @@ def carregar_dados():
         agora - pd.Timedelta(hours=12)
     )
 
-    # JUROS NÃO SERÃO FILTRADOS
-    juros = ["^TNX", "^IRX"]
-
-    # OTIMISMO
-    dados_otimismo = dados_otimismo[
-        dados_otimismo.index >= limite_12h
+    juros = [
+        "^TNX",
+        "^TYX"
     ]
 
-    # SEPARAR JUROS
     colunas_juros = [
-
-        c for c in dados_pessimismo.columns
-
+        c for c in closes.columns
         if c in juros
     ]
 
     colunas_normais = [
-
-        c for c in dados_pessimismo.columns
-
+        c for c in closes.columns
         if c not in juros
     ]
 
-    dados_juros = (
-        dados_pessimismo[colunas_juros]
-    )
-
     dados_normais = (
-        dados_pessimismo[colunas_normais]
+        closes[colunas_normais]
     )
 
-    # FILTRO 12H
+    dados_juros = (
+        closes[colunas_juros]
+    )
+
     dados_normais = dados_normais[
         dados_normais.index >= limite_12h
     ]
 
-    # JUNTA NOVAMENTE
-    dados_pessimismo = pd.concat(
+    closes = pd.concat(
         [dados_normais, dados_juros],
         axis=1
     )
 
-    return (
-        dados_otimismo,
-        dados_pessimismo,
-        ativos_otimismo,
-        ativos_pessimismo
-    )
+    closes = closes.sort_index()
 
-# ==================================================
+    closes = closes.ffill()
+
+    return closes
+
+# =========================================================
 # CARREGAR
-# ==================================================
+# =========================================================
 
-(
-    dados_otimismo,
-    dados_pessimismo,
-    ativos_otimismo,
-    ativos_pessimismo
-) = carregar_dados()
+dados = carregar_dados()
 
-# ==================================================
-# PROTEÇÃO
-# ==================================================
+if dados is None or dados.empty:
 
-if (
-    dados_otimismo.empty
-    or
-    dados_pessimismo.empty
-):
-
-    st.warning(
-        "Dados indisponíveis."
+    st.error(
+        "Não foi possível carregar os dados."
     )
 
     st.stop()
 
-# ==================================================
-# LIMPEZA
-# ==================================================
-
-dados_otimismo = (
-    dados_otimismo.dropna(how="all")
-)
-
-dados_pessimismo = (
-    dados_pessimismo.dropna(how="all")
-)
-
-dados = dados_otimismo.join(
-    dados_pessimismo,
-    how="outer"
-)
-
-dados = dados.ffill()
-
-dados = dados.sort_index()
-
-dados_otimismo = (
-    dados[dados_otimismo.columns]
-)
-
-dados_pessimismo = (
-    dados[dados_pessimismo.columns]
-)
-
-# ==================================================
-# SHIFT
-# ==================================================
-
-shift_map = {
-    "1m": 180,
-    "5m": 36,
-    "15m": 12,
-    "30m": 6
-}
-
-# ==================================================
+# =========================================================
 # VARIAÇÃO
-# ==================================================
+# =========================================================
 
 ativos_invertidos = [
+
     "^VIX",
     "DX-Y.NYB",
-    "BRL=X",
+    "USDBRL=X",
     "^TNX",
-    "^IRX",
+    "^TYX",
     "UUP"
 ]
 
 def variacao_percentual(
     serie,
-    nome_ativo
+    nome
 ):
 
-    shift = shift_map.get(intervalo, 1)
-
     variacao = (
-        ((serie / serie.shift(shift)) - 1)
-        * 100
+        np.log(
+            serie / serie.shift(shift)
+        ) * 100
     )
 
-    # INVERTER ATIVOS DE MEDO
-    if nome_ativo in ativos_invertidos:
+    if nome in ativos_invertidos:
 
         variacao = variacao * -1
 
-    return variacao
+    return variacao.fillna(0)
 
-# ==================================================
-# VARIAÇÕES
-# ==================================================
+# =========================================================
+# DATAFRAMES
+# =========================================================
 
 var_otimismo = pd.DataFrame({
 
     ativo: variacao_percentual(
-        dados_otimismo[ativo],
+        dados[ativo],
         ativo
-    ).fillna(0)
+    )
 
     for ativo in ativos_otimismo
+
+    if ativo in dados.columns
 })
 
 var_pessimismo = pd.DataFrame({
 
     ativo: variacao_percentual(
-        dados_pessimismo[ativo],
+        dados[ativo],
         ativo
-    ).fillna(0)
+    )
 
     for ativo in ativos_pessimismo
+
+    if ativo in dados.columns
 })
 
-# ==================================================
+# =========================================================
 # LINHA PONDERADA
-# ==================================================
+# =========================================================
 
-def linha_ponderada(df, pesos):
+def linha_ponderada(
+    df,
+    pesos
+):
 
     ativos_validos = [
 
@@ -436,8 +377,14 @@ def linha_ponderada(df, pesos):
         if a in df.columns
     ]
 
+    if len(ativos_validos) == 0:
+
+        return pd.Series(dtype=float)
+
     total_peso = sum(
+
         pesos[a]
+
         for a in ativos_validos
     )
 
@@ -461,32 +408,79 @@ linha_pessimismo = linha_ponderada(
     ativos_pessimismo
 )
 
-# ==================================================
+# =========================================================
+# SUAVIZAÇÃO
+# =========================================================
+
+linha_otimismo = (
+    linha_otimismo
+    .rolling(5)
+    .mean()
+)
+
+linha_pessimismo = (
+    linha_pessimismo
+    .rolling(5)
+    .mean()
+)
+
+# =========================================================
+# FORÇA LÍQUIDA
+# =========================================================
+
+forca_liquida = (
+    linha_otimismo
+    -
+    linha_pessimismo
+)
+
+# =========================================================
 # REMOVER TZ
-# ==================================================
+# =========================================================
 
-linha_otimismo.index = (
-    linha_otimismo.index.tz_localize(None)
-)
+try:
 
-linha_pessimismo.index = (
-    linha_pessimismo.index.tz_localize(None)
-)
+    linha_otimismo.index = (
+        linha_otimismo.index
+        .tz_localize(None)
+    )
 
-# ==================================================
+    linha_pessimismo.index = (
+        linha_pessimismo.index
+        .tz_localize(None)
+    )
+
+    forca_liquida.index = (
+        forca_liquida.index
+        .tz_localize(None)
+    )
+
+except:
+
+    pass
+
+# =========================================================
 # GRÁFICO
-# ==================================================
+# =========================================================
 
 fig = go.Figure()
 
+# =========================================================
 # OTIMISMO
+# =========================================================
+
 fig.add_trace(
 
     go.Scatter(
+
         x=linha_otimismo.index,
+
         y=linha_otimismo,
+
         mode="lines",
+
         name="🟢 Otimismo",
+
         line=dict(
             color="green",
             width=2
@@ -494,14 +488,22 @@ fig.add_trace(
     )
 )
 
+# =========================================================
 # PESSIMISMO
+# =========================================================
+
 fig.add_trace(
 
     go.Scatter(
+
         x=linha_pessimismo.index,
+
         y=linha_pessimismo,
+
         mode="lines",
+
         name="🔴 Pessimismo",
+
         line=dict(
             color="red",
             width=2
@@ -509,77 +511,117 @@ fig.add_trace(
     )
 )
 
+# =========================================================
+# FORÇA LÍQUIDA
+# =========================================================
+
+fig.add_trace(
+
+    go.Scatter(
+
+        x=forca_liquida.index,
+
+        y=forca_liquida,
+
+        mode="lines",
+
+        name="⚪ Força Líquida",
+
+        line=dict(
+            color="white",
+            width=3
+        )
+    )
+)
+
+# =========================================================
 # LINHA ZERO
+# =========================================================
+
 fig.add_hline(
+
     y=0,
+
     line_dash="dot",
+
     line_color="gray"
 )
 
+# =========================================================
 # LAYOUT
+# =========================================================
+
 fig.update_layout(
 
     template="plotly_dark",
+
+    height=750,
 
     hovermode="x unified",
 
     uirevision=True,
 
-    height=700,
-
     xaxis=dict(
+
         rangeslider=dict(
             visible=True
         ),
+
         showgrid=False
     ),
 
     yaxis=dict(
-        title="Força (%)",
+
+        title="Força Macro (%)",
+
         showgrid=True
     ),
 
     legend=dict(
+
         orientation="h",
+
         yanchor="bottom",
+
         y=1.02,
+
         xanchor="right",
+
         x=1
     )
 )
 
-# MOSTRAR
+# =========================================================
+# EXIBIR
+# =========================================================
+
 st.plotly_chart(
+
     fig,
+
     use_container_width=True,
+
     config={
+
         "scrollZoom": True,
+
         "displaylogo": False
     }
 )
 
-# ==================================================
+# =========================================================
 # SINAL
-# ==================================================
+# =========================================================
 
-def gerar_sinal(
-    linha_otimismo,
-    linha_pessimismo
-):
+def gerar_sinal():
 
-    ultimo_otimismo = (
-        linha_otimismo.iloc[-1]
-    )
+    ultimo = forca_liquida.iloc[-1]
 
-    ultimo_pessimismo = (
-        linha_pessimismo.iloc[-1]
-    )
-
-    if ultimo_otimismo > ultimo_pessimismo:
+    if ultimo > 0.15:
 
         return "🟢 COMPRA"
 
-    elif ultimo_pessimismo > ultimo_otimismo:
+    elif ultimo < -0.15:
 
         return "🔴 VENDA"
 
@@ -587,29 +629,63 @@ def gerar_sinal(
 
         return "⚪ NEUTRO"
 
-sinal = gerar_sinal(
-    linha_otimismo,
-    linha_pessimismo
-)
+sinal = gerar_sinal()
+
+# =========================================================
+# STATUS
+# =========================================================
 
 st.subheader(
     f"Sinal Atual: {sinal}"
 )
 
-# ==================================================
-# INFO
-# ==================================================
+# =========================================================
+# MÉTRICAS
+# =========================================================
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+
+    st.metric(
+
+        "🟢 Otimismo",
+
+        f"{linha_otimismo.iloc[-1]:.2f}"
+    )
+
+with col2:
+
+    st.metric(
+
+        "🔴 Pessimismo",
+
+        f"{linha_pessimismo.iloc[-1]:.2f}"
+    )
+
+with col3:
+
+    st.metric(
+
+        "⚪ Força Líquida",
+
+        f"{forca_liquida.iloc[-1]:.2f}"
+    )
+
+# =========================================================
+# ATUALIZAÇÃO
+# =========================================================
 
 st.caption(
 
-    f"🕒 Atualizado às: "
+    f"🕒 Atualizado às "
 
     f"{pd.Timestamp.now().strftime('%H:%M:%S')}"
 )
 
-# ==================================================
+# =========================================================
 # AUTO REFRESH
-# ==================================================
+# =========================================================
 
 if not st.session_state.pausado:
 
