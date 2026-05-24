@@ -5,20 +5,20 @@ import streamlit as st
 import plotly.graph_objects as go
 import time
 
-# =========================================================
+# =====================================================
 # CONFIG
-# =========================================================
+# =====================================================
 
 st.set_page_config(
-    page_title="Rastreador Macro - Reinaldo",
-    layout="wide"
+    layout="wide",
+    page_title="Rastreador Macro"
 )
 
 st.title("📊 Rastreador Macro - Reinaldo")
 
-# =========================================================
-# CONTROLE
-# =========================================================
+# =====================================================
+# PAUSA
+# =====================================================
 
 if "pausado" not in st.session_state:
     st.session_state.pausado = False
@@ -39,128 +39,83 @@ with col1:
 
 with col2:
 
-    status = (
+    st.write(
+
+        "🟢 AO VIVO"
+
+        if not st.session_state.pausado
+
+        else
+
         "🔴 PAUSADO"
-        if st.session_state.pausado
-        else "🟢 AO VIVO"
     )
 
-    st.markdown(f"### {status}")
-
-# =========================================================
+# =====================================================
 # PERÍODO
-# =========================================================
+# =====================================================
 
 opcoes = {
     "1d": "1m",
-    "5d": "5m",
-    "15d": "15m",
-    "1mo": "30m"
+    "5d": "5m"
 }
-
-if "periodo" not in st.session_state:
-    st.session_state.periodo = "5d"
 
 periodo = st.selectbox(
     "Período",
     list(opcoes.keys()),
-    index=list(opcoes.keys()).index(
-        st.session_state.periodo
-    )
+    index=1
 )
-
-st.session_state.periodo = periodo
 
 intervalo = opcoes[periodo]
 
-# =========================================================
+# =====================================================
 # SHIFT
-# =========================================================
+# =====================================================
 
 shift_map = {
-    "1m": 180,
-    "5m": 36,
-    "15m": 12,
-    "30m": 6
+    "1m": 60,
+    "5m": 12
 }
 
-shift = shift_map.get(intervalo, 1)
+shift = shift_map[intervalo]
 
-# =========================================================
+# =====================================================
 # ATIVOS
-# =========================================================
-
-# =========================================================
-# OTIMISMO
-# =========================================================
+# =====================================================
 
 ativos_otimismo = {
 
-    # FUTUROS EUA
     "ES=F": 3.0,
     "NQ=F": 3.0,
     "RTY=F": 1.5,
 
-    # BRASIL
-    "EWZ": 2.5,
+    "EWZ": 3.0,
+
     "VALE": 2.0,
     "PBR": 2.0,
-    "ITUB": 1.8,
+    "ITUB": 1.5,
 
-    # B3
     "VALE3.SA": 2.0,
     "PETR4.SA": 2.0,
-    "ITUB4.SA": 1.8,
-    "BBDC4.SA": 1.5,
-    "BBAS3.SA": 1.5,
-    "WEGE3.SA": 1.5,
-    "SMAL11.SA": 1.3,
-
-    # SEMICONDUTORES
-    "SOXX": 2.0,
-
-    # BANCOS EUA
-    "XLF": 1.5,
-
-    # HIGH YIELD
-    "HYG": 1.5
+    "ITUB4.SA": 1.5
 }
-
-# =========================================================
-# PESSIMISMO
-# =========================================================
 
 ativos_pessimismo = {
 
-    # VOLATILIDADE
-    "^VIX": 3.0,
+    "USDBRL=X": 4.0,
 
-    # DÓLAR GLOBAL
-    "DX-Y.NYB": 3.0,
-
-    # DÓLAR BR
-    "USDBRL=X": 3.5,
-
-    # JUROS EUA
-    "^TNX": 3.0,
-    "^TYX": 2.5,
-
-    # OURO
-    "GC=F": 1.5,
-
-    # DÓLAR ETF
-    "UUP": 1.5
+    "^TNX": 2.5
 }
 
-# =========================================================
+# =====================================================
 # DOWNLOAD
-# =========================================================
+# =====================================================
 
 @st.cache_data(ttl=60)
 
-def carregar_dados():
+def baixar():
 
     tickers = list(
+
         set(
             list(ativos_otimismo.keys())
             +
@@ -168,207 +123,113 @@ def carregar_dados():
         )
     )
 
-    try:
+    dados = yf.download(
 
-        dados = yf.download(
+        tickers=tickers,
 
-            tickers=tickers,
+        period=periodo,
 
-            period=periodo,
+        interval=intervalo,
 
-            interval=intervalo,
+        auto_adjust=True,
 
-            auto_adjust=True,
+        progress=False,
 
-            progress=False,
+        group_by="ticker",
 
-            group_by="ticker",
-
-            threads=True
-        )
-
-    except Exception as e:
-
-        st.error(f"Erro no download: {e}")
-
-        return None
-
-    # =====================================================
-    # EXTRAIR CLOSE
-    # =====================================================
+        threads=True
+    )
 
     closes = pd.DataFrame()
 
-    for ticker in tickers:
+    for t in tickers:
 
         try:
 
-            closes[ticker] = dados[ticker]["Close"]
+            closes[t] = dados[t]["Close"]
 
         except:
 
             pass
 
-    if closes.empty:
-
-        return None
-
-    # =====================================================
-    # TIMEZONE
-    # =====================================================
-
-    try:
-
-        if closes.index.tz is None:
-
-            closes.index = (
-                closes.index
-                .tz_localize("UTC")
-                .tz_convert("America/Sao_Paulo")
-            )
-
-        else:
-
-            closes.index = (
-                closes.index
-                .tz_convert("America/Sao_Paulo")
-            )
-
-    except:
-
-        pass
-
-    # =====================================================
-    # ÚLTIMAS 12 HORAS
-    # =====================================================
-
-    agora = pd.Timestamp.now(
-        tz="America/Sao_Paulo"
+    closes = closes.dropna(
+        axis=1,
+        how="all"
     )
-
-    limite_12h = (
-        agora - pd.Timedelta(hours=12)
-    )
-
-    juros = [
-        "^TNX",
-        "^TYX"
-    ]
-
-    colunas_juros = [
-        c for c in closes.columns
-        if c in juros
-    ]
-
-    colunas_normais = [
-        c for c in closes.columns
-        if c not in juros
-    ]
-
-    dados_normais = (
-        closes[colunas_normais]
-    )
-
-    dados_juros = (
-        closes[colunas_juros]
-    )
-
-    dados_normais = dados_normais[
-        dados_normais.index >= limite_12h
-    ]
-
-    closes = pd.concat(
-        [dados_normais, dados_juros],
-        axis=1
-    )
-
-    closes = closes.sort_index()
 
     closes = closes.ffill()
 
     return closes
 
-# =========================================================
-# CARREGAR
-# =========================================================
+dados = baixar()
 
-dados = carregar_dados()
+# =====================================================
+# PROTEÇÃO
+# =====================================================
 
-if dados is None or dados.empty:
+if dados.empty:
 
-    st.error(
-        "Não foi possível carregar os dados."
-    )
+    st.error("Sem dados.")
 
     st.stop()
 
-# =========================================================
-# VARIAÇÃO
-# =========================================================
+# =====================================================
+# VARIAÇÃO LOG
+# =====================================================
 
-ativos_invertidos = [
+def retorno(serie):
 
-    "^VIX",
-    "DX-Y.NYB",
-    "USDBRL=X",
-    "^TNX",
-    "^TYX",
-    "UUP"
-]
-
-def variacao_percentual(
-    serie,
-    nome
-):
-
-    variacao = (
+    return (
         np.log(
             serie / serie.shift(shift)
         ) * 100
     )
 
-    if nome in ativos_invertidos:
-
-        variacao = variacao * -1
-
-    return variacao.fillna(0)
-
-# =========================================================
+# =====================================================
 # DATAFRAMES
-# =========================================================
+# =====================================================
 
-var_otimismo = pd.DataFrame({
+var_otimismo = pd.DataFrame()
 
-    ativo: variacao_percentual(
-        dados[ativo],
-        ativo
-    )
+for ativo in ativos_otimismo:
 
-    for ativo in ativos_otimismo
+    if ativo in dados.columns:
 
-    if ativo in dados.columns
-})
+        var_otimismo[ativo] = (
+            retorno(dados[ativo])
+        )
 
-var_pessimismo = pd.DataFrame({
+var_pessimismo = pd.DataFrame()
 
-    ativo: variacao_percentual(
-        dados[ativo],
-        ativo
-    )
+for ativo in ativos_pessimismo:
 
-    for ativo in ativos_pessimismo
+    if ativo in dados.columns:
 
-    if ativo in dados.columns
-})
+        var_pessimismo[ativo] = (
+            retorno(dados[ativo])
+        )
 
-# =========================================================
+# =====================================================
+# LIMPEZA
+# =====================================================
+
+var_otimismo = (
+    var_otimismo
+    .replace([np.inf, -np.inf], np.nan)
+    .fillna(0)
+)
+
+var_pessimismo = (
+    var_pessimismo
+    .replace([np.inf, -np.inf], np.nan)
+    .fillna(0)
+)
+
+# =====================================================
 # LINHA PONDERADA
-# =========================================================
+# =====================================================
 
-def linha_ponderada(
-    df,
-    pesos
-):
+def linha(df, pesos):
 
     ativos_validos = [
 
@@ -377,97 +238,62 @@ def linha_ponderada(
         if a in df.columns
     ]
 
-    if len(ativos_validos) == 0:
-
-        return pd.Series(dtype=float)
-
-    total_peso = sum(
+    total = sum(
 
         pesos[a]
 
         for a in ativos_validos
     )
 
-    linha = sum(
+    return sum(
 
         df[a] * pesos[a]
 
         for a in ativos_validos
 
-    ) / total_peso
+    ) / total
 
-    return linha
-
-linha_otimismo = linha_ponderada(
+linha_otimismo = linha(
     var_otimismo,
     ativos_otimismo
 )
 
-linha_pessimismo = linha_ponderada(
+linha_pessimismo = linha(
     var_pessimismo,
     ativos_pessimismo
 )
 
-# =========================================================
+# =====================================================
 # SUAVIZAÇÃO
-# =========================================================
+# =====================================================
 
 linha_otimismo = (
     linha_otimismo
-    .rolling(5)
+    .rolling(3)
     .mean()
 )
 
 linha_pessimismo = (
     linha_pessimismo
-    .rolling(5)
+    .rolling(3)
     .mean()
 )
 
-# =========================================================
+# =====================================================
 # FORÇA LÍQUIDA
-# =========================================================
+# =====================================================
 
-forca_liquida = (
+forca = (
     linha_otimismo
     -
     linha_pessimismo
 )
 
-# =========================================================
-# REMOVER TZ
-# =========================================================
-
-try:
-
-    linha_otimismo.index = (
-        linha_otimismo.index
-        .tz_localize(None)
-    )
-
-    linha_pessimismo.index = (
-        linha_pessimismo.index
-        .tz_localize(None)
-    )
-
-    forca_liquida.index = (
-        forca_liquida.index
-        .tz_localize(None)
-    )
-
-except:
-
-    pass
-
-# =========================================================
+# =====================================================
 # GRÁFICO
-# =========================================================
+# =====================================================
 
 fig = go.Figure()
-
-# =========================================================
-# OTIMISMO
-# =========================================================
 
 fig.add_trace(
 
@@ -482,15 +308,11 @@ fig.add_trace(
         name="🟢 Otimismo",
 
         line=dict(
-            color="green",
+            color="lime",
             width=2
         )
     )
 )
-
-# =========================================================
-# PESSIMISMO
-# =========================================================
 
 fig.add_trace(
 
@@ -511,17 +333,13 @@ fig.add_trace(
     )
 )
 
-# =========================================================
-# FORÇA LÍQUIDA
-# =========================================================
-
 fig.add_trace(
 
     go.Scatter(
 
-        x=forca_liquida.index,
+        x=forca.index,
 
-        y=forca_liquida,
+        y=forca,
 
         mode="lines",
 
@@ -534,147 +352,77 @@ fig.add_trace(
     )
 )
 
-# =========================================================
-# LINHA ZERO
-# =========================================================
-
 fig.add_hline(
-
     y=0,
-
-    line_dash="dot",
-
-    line_color="gray"
+    line_dash="dot"
 )
-
-# =========================================================
-# LAYOUT
-# =========================================================
 
 fig.update_layout(
 
     template="plotly_dark",
 
-    height=750,
+    height=700,
 
     hovermode="x unified",
 
-    uirevision=True,
-
     xaxis=dict(
-
         rangeslider=dict(
             visible=True
-        ),
-
-        showgrid=False
-    ),
-
-    yaxis=dict(
-
-        title="Força Macro (%)",
-
-        showgrid=True
-    ),
-
-    legend=dict(
-
-        orientation="h",
-
-        yanchor="bottom",
-
-        y=1.02,
-
-        xanchor="right",
-
-        x=1
+        )
     )
 )
 
-# =========================================================
-# EXIBIR
-# =========================================================
-
 st.plotly_chart(
-
     fig,
-
-    use_container_width=True,
-
-    config={
-
-        "scrollZoom": True,
-
-        "displaylogo": False
-    }
+    use_container_width=True
 )
 
-# =========================================================
+# =====================================================
 # SINAL
-# =========================================================
+# =====================================================
 
-def gerar_sinal():
+ultimo = forca.iloc[-1]
 
-    ultimo = forca_liquida.iloc[-1]
+if ultimo > 0.10:
 
-    if ultimo > 0.15:
+    sinal = "🟢 COMPRA"
 
-        return "🟢 COMPRA"
+elif ultimo < -0.10:
 
-    elif ultimo < -0.15:
+    sinal = "🔴 VENDA"
 
-        return "🔴 VENDA"
+else:
 
-    else:
-
-        return "⚪ NEUTRO"
-
-sinal = gerar_sinal()
-
-# =========================================================
-# STATUS
-# =========================================================
+    sinal = "⚪ NEUTRO"
 
 st.subheader(
     f"Sinal Atual: {sinal}"
 )
 
-# =========================================================
+# =====================================================
 # MÉTRICAS
-# =========================================================
+# =====================================================
 
-col1, col2, col3 = st.columns(3)
+c1, c2, c3 = st.columns(3)
 
-with col1:
+c1.metric(
+    "🟢 Otimismo",
+    f"{linha_otimismo.iloc[-1]:.2f}"
+)
 
-    st.metric(
+c2.metric(
+    "🔴 Pessimismo",
+    f"{linha_pessimismo.iloc[-1]:.2f}"
+)
 
-        "🟢 Otimismo",
+c3.metric(
+    "⚪ Força Líquida",
+    f"{forca.iloc[-1]:.2f}"
+)
 
-        f"{linha_otimismo.iloc[-1]:.2f}"
-    )
-
-with col2:
-
-    st.metric(
-
-        "🔴 Pessimismo",
-
-        f"{linha_pessimismo.iloc[-1]:.2f}"
-    )
-
-with col3:
-
-    st.metric(
-
-        "⚪ Força Líquida",
-
-        f"{forca_liquida.iloc[-1]:.2f}"
-    )
-
-# =========================================================
-# ATUALIZAÇÃO
-# =========================================================
+# =====================================================
+# HORÁRIO
+# =====================================================
 
 st.caption(
 
@@ -683,9 +431,9 @@ st.caption(
     f"{pd.Timestamp.now().strftime('%H:%M:%S')}"
 )
 
-# =========================================================
+# =====================================================
 # AUTO REFRESH
-# =========================================================
+# =====================================================
 
 if not st.session_state.pausado:
 
